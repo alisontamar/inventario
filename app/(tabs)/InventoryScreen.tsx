@@ -83,7 +83,6 @@ export default function InventoryTable() {
     (product.empresa && product.empresa.toLowerCase().includes(search.toLowerCase())) ||
     (product.grupo && product.grupo.toLowerCase().includes(search.toLowerCase()))
   );
-
   // Función para obtener imagen por defecto
   const getDefaultImage = () => {
     return 'https://via.placeholder.com/80x80/cccccc/666666?text=Sin+Imagen';
@@ -121,6 +120,7 @@ export default function InventoryTable() {
         value={search}
         onChangeText={setSearch}
         style={styles.searchBar}
+        placeholderTextColor="#888"
       />
 
       <Text style={styles.resultsCount}>
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    color: '#000',
+    color: '#fff',
   },
   resultsCount: {
     fontSize: 14,
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#FFC107',
   },
   lowStockText: {
-    color: '#fff',
+    color: '#000',
     fontSize: 14,
     fontWeight: '600',
   },

@@ -234,9 +234,10 @@ export default function SalesScreen() {
       {/* Filtros */}
       <TextInput
         style={styles.search}
-        placeholder="Buscar por nombre, característica, grupo..."
+        placeholder="Buscar por nombre, característica, grupo"
         value={query}
         onChangeText={setQuery}
+        placeholderTextColor="#888"
       />
 
       <View style={styles.dateFilters}>
@@ -378,11 +379,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#262733",
     borderRadius: 10,
     padding: 12,
-    fontSize: 16,
+    fontSize: 13,
     borderWidth: 1,
     borderColor: '#ddd',
     marginBottom: 10,
-    color: '#000',
+    color: '#fff',
   },
   resultsCount: {
     fontSize: 14,

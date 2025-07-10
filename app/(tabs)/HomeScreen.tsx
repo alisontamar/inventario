@@ -11,6 +11,7 @@ import { MaterialIcons, Entypo, MaterialCommunityIcons } from "@expo/vector-icon
 import { useState, useEffect } from "react";
 import { Link } from "expo-router";
 import { supabase } from "@/constants/supabase"; // Ajusta la ruta según tu estructura
+import { Alert } from "react-native";
 
 // Tipos para TypeScript
 type LowStockProduct = {
@@ -26,7 +27,11 @@ type DailySales = {
 
 type TopProduct = {
   name: string;
+  grupo?: string;
+  id: string;
+  fechaVenta: string;
   totalSold: number;
+  cantidadVendida: number;
 };
 
 export default function HomeScreen() {
@@ -62,56 +67,59 @@ export default function HomeScreen() {
   };
 
   // Función para obtener ventas del día
-const fetchDailySales = async () => {
-  try {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+  const fetchDailySales = async () => {
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
 
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
 
-    const { data, error } = await supabase
-      .from('ventas')
-      .select('total')
-      .gte('fecha_venta', start.toISOString())
-      .lte('fecha_venta', end.toISOString());
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('total')
+        .gte('fecha_venta', start.toISOString())
+        .lte('fecha_venta', end.toISOString());
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const totalSales = data?.reduce((sum, venta) => sum + Number(venta.total), 0) || 0;
+      const totalSales = data?.reduce((sum, venta) => sum + Number(venta.total), 0) || 0;
 
-    setDailySales({
-      total: totalSales,
-      date: start.toISOString().split('T')[0],
-    });
-  } catch (err) {
-    console.error('Error fetching daily sales:', err);
-    setError('Error al cargar ventas del día');
-  }
-};
+      setDailySales({
+        total: totalSales,
+        date: start.toISOString().split('T')[0],
+      });
+    } catch (err) {
+      console.error('Error fetching daily sales:', err);
+      setError('Error al cargar ventas del día');
+    }
+  };
 
   // Función para obtener el producto más vendido
   const fetchTopProduct = async () => {
     try {
       const { data, error } = await supabase
-        .from('vista_productos_mas_vendidos')
-        .select('nombre, cantidad_total_vendida')
-        .order('cantidad_total_vendida', { ascending: false })
-        .limit(1)
-        .single();
+        .from('vista_productos_mas_vendido').select("*")
 
       if (error) throw error;
-
       setTopProduct({
-        name: data?.nombre || 'Sin datos',
-        totalSold: data?.cantidad_total_vendida || 0,
+        name: data[0]?.nombre || 'Sin datos',
+        grupo: data[0]?.grupo || 'Sin grupo',
+        fechaVenta: data[0]?.fecha_venta || 'Sin fecha',
+        id: data[0]?.product_id || 'Sin ID',
+        cantidadVendida: data[0]?.cantidad_vendida || 0,
+        totalSold: data[0]?.total || 0,
       });
     } catch (err) {
-      console.error('Error fetching top product:', err);
+      Alert.alert("Error", "No se pudo obtener el producto más vendido");
       // Si no hay datos, establecer un valor por defecto
       setTopProduct({
         name: 'Sin datos',
         totalSold: 0,
+        id: 'Sin ID',
+        fechaVenta: 'Sin fecha',
+        grupo: 'Sin grupo',
+        cantidadVendida: 0,
       });
     }
   };
@@ -121,7 +129,7 @@ const fetchDailySales = async () => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
-      
+
       try {
         await Promise.all([
           fetchLowStockProducts(),
@@ -175,7 +183,7 @@ const fetchDailySales = async () => {
       <View style={styles.headerContainer}>
         <Text style={styles.header}>Stocky</Text>
         <TouchableOpacity onPress={refreshData} style={styles.refreshButton}>
-          <MaterialIcons name="refresh" size={24} color="#1976D2" />
+          <MaterialIcons name="refresh" size={28} color="#2196F3" />
         </TouchableOpacity>
       </View>
 
@@ -194,9 +202,9 @@ const fetchDailySales = async () => {
 
         <Card
           icon="whatshot"
-          title="Más Vendido"
+          title={`Producto más vendido en la fecha ${topProduct?.fechaVenta.slice(0,10)} - (${topProduct?.grupo})`}
           value={topProduct?.name || 'Sin datos'}
-          subtitle={topProduct?.totalSold ? `${topProduct.totalSold} vendidos` : ''}
+          subtitle={`${topProduct?.cantidadVendida} ${topProduct?.cantidadVendida === 1 ? "cantidad": "cantidades"} - precio de venta: ${topProduct?.totalSold}`}
           color="#2196F3"
         />
       </ScrollView>
@@ -216,7 +224,7 @@ const fetchDailySales = async () => {
                 <Entypo name="cross" size={24} color="black" />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalList}>
               {lowStockProducts.length > 0 ? (
                 lowStockProducts.map((item) => (
@@ -309,18 +317,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 15,
   },
   header: {
     fontSize: 32,
     marginBottom: 60,
     fontWeight: "bold",
     flex: 1,
-    color: "#ffffff", 
+    color: "#ffffff",
   },
   refreshButton: {
     padding: 10,
-    marginBottom:60,
+    marginBottom: 60,
   },
   cardContainer: { gap: 15 },
   card: {
@@ -338,15 +346,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   cardText: { marginLeft: 12 },
-  cardTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 5, color: "#fff"},
+  cardTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 5, color: "#fff" },
   cardSubtitle: { fontSize: 14, color: "#fff", marginTop: 4 },
   cardValue: { fontSize: 20, fontWeight: "bold", color: "#fff" },
   stockItem: { fontSize: 15, color: "#fff", marginBottom: 4 },
-  verMas: { 
-    marginTop: 10, 
-    color: "#1976D2", 
-    fontWeight: "bold", 
-    textAlign: "right" 
+  verMas: {
+    marginTop: 10,
+    color: "#1976D2",
+    fontWeight: "bold",
+    textAlign: "right"
   },
   loadingText: {
     marginTop: 10,
@@ -405,8 +413,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 15,
   },
-  modalTitle: { 
-    fontSize: 18, 
+  modalTitle: {
+    fontSize: 18,
     fontWeight: "bold",
   },
   modalList: {
