@@ -17,13 +17,6 @@ import { supabase } from "@/constants/supabase";
 import * as Notifications from 'expo-notifications';
 
 
-// Agregar estas interfaces si usas TypeScript
-interface FormDataFile {
-  uri: string;
-  type: string;
-  name: string;
-}
-
 export default function RegisterModal() {
   const [step, setStep] = useState<"choose"|"record"|"verify"|"scan">("choose");
   const [type, setType] = useState<"inventory"|"sale"|null>(null);
@@ -158,12 +151,11 @@ const guardarProducto = async () => {
       }
     }
 
-    // Primero verificar si ya existe un producto con el mismo nombre
+    // Verificar si ya existe un producto similar (por barcode o nombre + empresa)
     const { data: existingProduct, error: searchError } = await supabase
-      .from('productos')
-      .select('id, cantidad, precio_venta, precio_compra, empresa, grupo, barcode, imagen_url, fecha_vencimiento')
-      .eq('nombre', form.nombre.trim())
-      .single();
+    .from('productos')
+    .select('*')
+    .eq('barcode', form.barcode)
 
     if (searchError && searchError.code !== 'PGRST116') {
       console.error('Error buscando producto existente:', searchError);
@@ -177,41 +169,37 @@ const guardarProducto = async () => {
     if (photo) {
       imagen_url = await subirImagen(photo);
     }
-
+    
+    
     if (existingProduct) {
-      // El producto ya existe, actualizar la cantidad y otros campos si es necesario
-      const nuevaCantidad = existingProduct.cantidad + (form.cantidad ? parseInt(form.cantidad) : 0);
-      
+      const nuevaCantidad = (existingProduct[0].cantidad || 0) + (form.cantidad ? parseInt(form.cantidad) : 0);
+        // console.log(existingProduct);
       const updateData = {
         cantidad: nuevaCantidad,
-        // Actualizar otros campos solo si se proporcionaron nuevos valores
-        ...(form.empresa && { empresa: form.empresa }),
-        ...(form.grupo && { grupo: form.grupo }),
         ...(form.precioDeVenta && { precio_venta: parseFloat(form.precioDeVenta) }),
         ...(form.precioDeCompra && { precio_compra: parseFloat(form.precioDeCompra) }),
-        ...(form.barcode && { barcode: form.barcode }),
-        ...(imagen_url && { imagen_url: imagen_url }),
-        ...(fechaVencimientoFormatted && { fecha_vencimiento: fechaVencimientoFormatted })
+        ...(imagen_url && { imagen_url }),
+        ...(fechaVencimientoFormatted && { fecha_vencimiento: fechaVencimientoFormatted }),
       };
-
       const { error: updateError } = await supabase
         .from('productos')
         .update(updateData)
-        .eq('id', existingProduct.id);
-
+        .eq('id', existingProduct[0].id);
+    
       if (updateError) {
         console.error('Error actualizando producto:', updateError);
         Alert.alert("Error", "No se pudo actualizar el producto");
       } else {
         Alert.alert(
           "Producto Actualizado", 
-          `Se agregaron ${form.cantidad || 0} unidades al producto existente.\nCantidad total: ${nuevaCantidad} unidades`
+          `Se actualizaron ${form.cantidad || 0} unidades y datos del producto existente.`
         );
         reset();
       }
-    } else {
+    }
+    else {
       // El producto no existe, crear uno nuevo
-      const { data, error } = await supabase
+      const { _, error } = await supabase
         .from('productos')
         .insert([{
           nombre: form.nombre,
@@ -241,8 +229,6 @@ const guardarProducto = async () => {
   }
 };
 
-
-
 const guardarVenta = async () => {
   try {
     setIsLoading(true);
@@ -259,6 +245,7 @@ const guardarVenta = async () => {
       .single();
 
     if (!productos || searchError) {
+      console.log(searchError)
       Alert.alert("Error", "Producto no encontrado");
       return;
     }
@@ -285,7 +272,7 @@ const guardarVenta = async () => {
     }
 
     // Registrar la venta
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('ventas')
       .insert([{
         producto_id: productos.id,
@@ -510,15 +497,15 @@ const guardarVenta = async () => {
         if (grupoMatch) nd.grupo = grupoMatch[1].trim();
       }
       if (lower.includes("precio de venta")) {
-        const precioMatch = text.match(/precio\s+de\s+venta\s+(\d+)/i);
+        const precioMatch = text.match(/precio\s+de\s+venta\s+([\d\s.,]+)/i);
         if (precioMatch) nd.precioDeVenta = precioMatch[1];
       }
       if (lower.includes("precio de compra")) {
-        const precioMatch = text.match(/precio\s+de\s+compra\s+(\d+)/i);
+        const precioMatch = text.match(/precio\s+de\s+compra\s+([\d\s.,]+)/i);
         if (precioMatch) nd.precioDeCompra = precioMatch[1];
       }
       if (lower.includes("cantidad")) {
-        const cantidadMatch = text.match(/cantidad\s+(\d+)/i);
+        const cantidadMatch = text.match(/cantidad\s+([\d\s.,]+)/i);
         if (cantidadMatch) nd.cantidad = cantidadMatch[1];
       }
       if (lower.includes("fecha de vencimiento") || lower.includes("vencimiento")) {
@@ -583,11 +570,11 @@ if (lower.includes("fecha de vencimiento") || lower.includes("vencimiento")) {
         if (nombreMatch) nd.nombre = nombreMatch[1].trim();
       }
       if (lower.includes("cantidad")) {
-        const cantidadMatch = text.match(/cantidad\s+(\d+)/i);
+        const cantidadMatch = text.match(/cantidad\s+([\d\s.,]+)/i);
         if (cantidadMatch) nd.cantidad = cantidadMatch[1];
       }
       if (lower.includes("precio de venta") || lower.includes("precio")) {
-        const precioMatch = text.match(/precio(?:\s+de\s+venta)?\s+(\d+)/i);
+        const precioMatch = text.match(/precio\s+de\s+venta\s+([\d\s.,]+)/i);
         if (precioMatch) nd.precioDeVenta = precioMatch[1];
       }
     }
@@ -691,7 +678,7 @@ if (lower.includes("fecha de vencimiento") || lower.includes("vencimiento")) {
             size={100}
             color={isListening ? "#FF3D00" : "#1976D2"}
           />
-
+          {/*Botones de inicio y pausa de la grabación*/}
           <View style={styles.recordingControls}>
             <TouchableOpacity
               onPress={toggleRecording}
@@ -950,7 +937,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 10,
     textAlign: "center",
-     color: "#fff",
+    color: "#fff",
   },
   chooseBox: { flexDirection: "row", gap: 20 },
   chooseCard: {
@@ -959,6 +946,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     elevation: 3,
+    borderColor: "blue",
+    borderWidth:2,
     width: 140,
   },
   chooseText: { fontSize: 16, fontWeight: "600", marginTop: 8, color:"#fff" },
@@ -966,7 +955,7 @@ const styles = StyleSheet.create({
   nextButton: {
     marginTop: 15,
     width: "100%",
-    backgroundColor: "#191a26",
+    backgroundColor: "#5ebd5e",
     paddingHorizontal: 25,
     paddingVertical: 12,
     borderRadius: 10,
@@ -1086,7 +1075,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   nextText: {
-    color: "#white",
+    color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
