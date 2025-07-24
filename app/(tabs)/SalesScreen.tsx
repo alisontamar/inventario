@@ -5,13 +5,13 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  Image,
   Alert,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
 import { useState, useEffect } from "react";
 import { supabase } from "@/constants/supabase";
+import BackButton from "@/app/components/BackButton";
 
 // Tipo para las ventas
 interface Sale {
@@ -25,7 +25,6 @@ interface Sale {
   notas: string | null;
   // Datos del producto relacionado (si existe)
   productos?: {
-    imagen_url: string | null;
     caracteristicas: string | null;
     grupo: string | null;
     empresa: string | null;
@@ -36,7 +35,7 @@ export default function SalesScreen() {
   const [query, setQuery] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState('hoy'); // Por defecto "hoy"
   const [expanded, setExpanded] = useState<string[]>([]);
-  
+
   // Estados para manejo de datos
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,35 +59,23 @@ export default function SalesScreen() {
     });
   };
 
-  // Función para obtener el label del período con fecha (si es necesario)
-  const getPeriodLabel = (period: string) => {
-    const periodData = periods.find(p => p.key === period);
-    if (!periodData) return period;
-    
-    if (period === 'hoy') {
-      return `${periodData.label} (${formatCurrentDate()})`;
-    }
-    
-    return periodData.label;
-  };
-
   // Función corregida para obtener el rango de fechas según el período seleccionado
   const getDateRange = (period: string) => {
     const now = new Date();
-    
-    switch(period) {
+
+    switch (period) {
       case 'hoy':
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         return { start: startOfToday, end: endOfToday };
-        
+
       case 'ayer':
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
         const startOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
         const endOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
         return { start: startOfYesterday, end: endOfYesterday };
-        
+
       case 'semana':
         const startOfWeek = new Date(now);
         const dayOfWeek = startOfWeek.getDay();
@@ -97,12 +84,12 @@ export default function SalesScreen() {
         startOfWeek.setHours(0, 0, 0, 0);
         const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         return { start: startOfWeek, end: endOfWeek };
-        
+
       case 'mes':
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const endOfMonth = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         return { start: startOfMonth, end: endOfMonth };
-        
+
       default:
         const defaultStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const defaultEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
@@ -119,7 +106,6 @@ export default function SalesScreen() {
         .select(`
           *,
           productos (
-            imagen_url,
             caracteristicas,
             grupo,
             empresa
@@ -159,11 +145,6 @@ export default function SalesScreen() {
     );
   };
 
-  // Función para obtener imagen por defecto
-  const getDefaultImage = () => {
-    return 'https://via.placeholder.com/80x80/cccccc/666666?text=Sin+Imagen';
-  };
-
   // Función para formatear la fecha
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -177,31 +158,29 @@ export default function SalesScreen() {
   // Función para verificar si una fecha está en el rango (corregida)
   const isDateInRange = (dateString: string, start: Date, end: Date) => {
     const itemDate = new Date(dateString);
-    
+
     // Crear fechas solo con año, mes y día para comparación
     const itemDateOnly = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
     const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
     const endDateOnly = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-    
+
     return itemDateOnly >= startDateOnly && itemDateOnly <= endDateOnly;
   };
 
   // Filtrado corregido
-  const filteredSales = sales.filter((item) => {
-    // Filtro por texto
-    const matchName = item.nombre_producto.toLowerCase().includes(query.toLowerCase());
-    const matchFeature = item.productos?.caracteristicas?.toLowerCase().includes(query.toLowerCase()) || false;
-    const matchCategory = item.productos?.grupo?.toLowerCase().includes(query.toLowerCase()) || false;
-    const matchCompany = item.productos?.empresa?.toLowerCase().includes(query.toLowerCase()) || false;
-    const matchesText = matchName || matchFeature || matchCategory || matchCompany;
-    
-    // Filtro por período seleccionado
-    const { start, end } = getDateRange(selectedPeriod);
-    const matchDate = isDateInRange(item.fecha_venta, start, end);
+  const filteredSales = sales
+    .filter((item) => {
+      const matchName = item.nombre_producto.toLowerCase().includes(query.toLowerCase());
+      const matchFeature = item.productos?.caracteristicas?.toLowerCase().includes(query.toLowerCase()) || false;
+      const matchCategory = item.productos?.grupo?.toLowerCase().includes(query.toLowerCase()) || false;
+      const matchCompany = item.productos?.empresa?.toLowerCase().includes(query.toLowerCase()) || false;
+      const matchesText = matchName || matchFeature || matchCategory || matchCompany;
 
-    // Solo incluir si coincide con el texto Y está en el rango de fechas
-    return matchesText && matchDate;
-  });
+      const { start, end } = getDateRange(selectedPeriod);
+      const matchDate = isDateInRange(item.fecha_venta, start, end);
+
+      return matchesText && matchDate;
+    })
 
   // Calcular productos con alta demanda SOLO de las ventas filtradas
   const ventasPorProducto: Record<string, number> = {};
@@ -228,9 +207,34 @@ export default function SalesScreen() {
       </View>
     );
   }
+  const groupSalesByProduct = (salesList: Sale[]) => {
+    const grouped: Record<string, Sale> = {};
+
+    salesList.forEach((sale) => {
+      const key = sale.producto_id || sale.nombre_producto;
+
+      if (!grouped[key]) {
+        grouped[key] = { ...sale };
+      } else {
+        grouped[key].cantidad += sale.cantidad;
+        grouped[key].total += sale.total;
+        grouped[key].precio_venta += sale.precio_venta; // Opcional: puedes dividir luego si quieres el promedio
+      }
+    });
+
+    // Opcional: para que el precio promedio tenga más sentido
+    Object.values(grouped).forEach(sale => {
+      sale.precio_venta = sale.total / sale.cantidad;
+    });
+
+    return Object.values(grouped);
+  };
+
+  const groupedSalesArray = groupSalesByProduct(filteredSales);
 
   return (
     <View style={styles.container}>
+      <BackButton path='/' label='Volver' />
       {/* Filtros */}
       <TextInput
         style={styles.search}
@@ -258,7 +262,7 @@ export default function SalesScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-        
+
         <TouchableOpacity
           onPress={clearFilters}
           style={styles.clearButton}
@@ -273,7 +277,7 @@ export default function SalesScreen() {
 
       {/* Lista de tarjetas de ventas */}
       <FlatList
-        data={filteredSales}
+        data={groupedSalesArray}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         refreshControl={
@@ -282,11 +286,6 @@ export default function SalesScreen() {
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={styles.row}>
-              <Image 
-                source={{ uri: item.productos?.imagen_url || getDefaultImage() }} 
-                style={styles.image}
-                defaultSource={{ uri: getDefaultImage() }}
-              />
               <View style={styles.info}>
                 <Text style={styles.name}>{item.nombre_producto}</Text>
                 <Text style={styles.detail}>
@@ -330,8 +329,8 @@ export default function SalesScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              No se encontraron ventas para {selectedPeriod === 'hoy' 
-                ? `hoy (${formatCurrentDate()})` 
+              No se encontraron ventas para {selectedPeriod === 'hoy'
+                ? `hoy (${formatCurrentDate()})`
                 : periods.find(p => p.key === selectedPeriod)?.label.toLowerCase()}
             </Text>
             <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
@@ -445,7 +444,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
   },
   row: { flexDirection: "row" },
-  image: { width: 80, height: 80, borderRadius: 10 },
   info: { marginLeft: 12, flex: 1, justifyContent: "center", color: "#fff" },
   name: { fontSize: 18, fontWeight: "bold", color: "#fff" },
   detail: { fontSize: 14, color: "#fff", marginTop: 2 },
