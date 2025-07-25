@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "I&S",
-    "slug": "gestion",
+    "slug": "iands",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
@@ -48,9 +48,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "5d762623-1afd-4926-a1f7-f42b1b68e526"
+        "projectId": "65f3fa59-511d-4eb2-bf2c-9b249d6d4363"
       }
     },
-    "owner": "alisontamar"
+    "owner": "rodrigo_pa"
   }
 }

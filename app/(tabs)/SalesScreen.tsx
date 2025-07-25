@@ -12,6 +12,7 @@ import {
 import { useState, useEffect } from "react";
 import { supabase } from "@/constants/supabase";
 import BackButton from "@/app/components/BackButton";
+import Constants from 'expo-constants';
 
 // Tipo para las ventas
 interface Sale {
@@ -361,7 +362,7 @@ export default function SalesScreen() {
   );
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#191a26" },
+  container: { flex: 1, padding: 20, backgroundColor: "#191a26", marginTop: Constants.statusBarHeight },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

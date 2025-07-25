@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { Link } from "expo-router";
 import { supabase } from "@/constants/supabase"; // Ajusta la ruta según tu estructura
 import { Alert } from "react-native";
-
+import Constants from 'expo-constants';
 // Tipos para TypeScript
 type LowStockProduct = {
   id: string;
@@ -102,7 +102,6 @@ export default function HomeScreen() {
         .from('vista_productos_mas_vendidos').select("*")
 
       if (error) throw error;
-      console.log(data)
       setTopProduct({
         name: data[0]?.nombre || 'Sin datos',
         grupo: data[0]?.categoria || 'Sin grupo',
@@ -115,11 +114,12 @@ export default function HomeScreen() {
       Alert.alert("Error", "No se pudo obtener el producto más vendido");
       // Si no hay datos, establecer un valor por defecto
       setTopProduct({
-        name: 'Sin datos',
-        totalSold: 0,
-        id: 'Sin ID',
+        name: 'Sin nombre',
         grupo: 'Sin grupo',
+        id: 'Sin ID',
+        empresa: 'Sin empresa',
         cantidadVendida: 0,
+        totalSold: 0,
       });
     }
   };
@@ -308,7 +308,7 @@ function LowStockListCard({ products, onPressMore }: LowStockListCardProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#191a26" },
+  container: { flex: 1, padding: 20, backgroundColor: "#191a26", marginTop: Constants.statusBarHeight },
   centerContent: {
     justifyContent: "center",
     alignItems: "center",
@@ -333,11 +333,11 @@ const styles = StyleSheet.create({
   cardContainer: { gap: 15 },
   card: {
     flexDirection: "row",
-    backgroundColor: 'rgba(255, 255, 255, 0.05)', // capa translúcida
+    backgroundColor: 'rgba(118, 199, 246, 0.05)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(109, 180, 242, 0.1)',
     elevation: 3,
     alignItems: "flex-start",
     borderLeftWidth: 5,
