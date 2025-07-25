@@ -21,7 +21,7 @@ interface Product {
   precio_venta: number | null;
   precio_compra: number | null;
   cantidad: number;
-  imagen_url: string | null;
+  imagen_blob: ArrayBuffer | null;
   caracteristicas: string | null;
   grupo: string | null;
   barcode: string | null;
@@ -35,11 +35,91 @@ export default function InventoryTable() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [imageUris, setImageUris] = useState<{ [key: string]: string }>({});
 
-  // Función para cargar productos desde Supabase
+  // Función para convertir ArrayBuffer a data URI
+  const arrayBufferToDataUri = (buffer: ArrayBuffer, mimeType: string = 'image/jpeg'): string => {
+    try {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      return `data:${mimeType};base64,${base64}`;
+    } catch (error) {
+      console.error('Error converting ArrayBuffer to data URI:', error);
+      return createPlaceholderSVG();
+    }
+  };
+
+  // Función para crear placeholder SVG local
+  const createPlaceholderSVG = (width = 80, height = 80, text = "Sin Imagen") => {
+    const svg = `
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${width}" height="${height}" fill="#f0f0f0" stroke="#cccccc" stroke-width="1"/>
+        <text x="${width/2}" y="${height/2}" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="10" fill="#999999">${text}</text>
+      </svg>
+    `;
+    
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
+
+  // Función para procesar imágenes blob (CORREGIDA)
+  const processProductImages = async (productsData: Product[]) => {
+    const newImageUris: { [key: string]: string } = {};
+    
+    for (const product of productsData) {
+      try {
+        console.log(`Procesando imagen para producto ${product.id}:`, {
+          hasImageBlob: !!product.imagen_blob,
+          imageType: typeof product.imagen_blob,
+          imageLength: product.imagen_blob ? product.imagen_blob.byteLength : 0
+        });
+
+        if (product.imagen_blob && product.imagen_blob.byteLength > 0) {
+          // Intentar diferentes tipos MIME
+          const mimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+          let imageUri = null;
+          
+          for (const mimeType of mimeTypes) {
+            try {
+              imageUri = arrayBufferToDataUri(product.imagen_blob, mimeType);
+              if (imageUri) {
+                break;
+              }
+            } catch (error) {
+              console.log(`Error con mime type ${mimeType}:`, error);
+            }
+          }
+          
+          if (imageUri) {
+            newImageUris[product.id] = imageUri;
+            console.log(`Imagen procesada exitosamente para producto ${product.id}`);
+          } else {
+            console.log(`No se pudo procesar imagen para producto ${product.id}`);
+            newImageUris[product.id] = createPlaceholderSVG();
+          }
+        } else {
+          console.log(`No hay imagen blob para producto ${product.id}`);
+          newImageUris[product.id] = createPlaceholderSVG();
+        }
+      } catch (error) {
+        console.error(`Error procesando imagen para producto ${product.id}:`, error);
+        newImageUris[product.id] = createPlaceholderSVG();
+      }
+    }
+    
+    console.log('Todas las imágenes procesadas:', Object.keys(newImageUris));
+    setImageUris(newImageUris);
+  };
+
+  // Función para cargar productos desde Supabase (CORREGIDA)
   const loadProducts = async () => {
     try {
       setLoading(true);
+      console.log('Cargando productos desde Supabase...');
+      
       const { data, error } = await supabase
         .from('productos')
         .select('*')
@@ -48,11 +128,19 @@ export default function InventoryTable() {
       if (error) {
         console.error('Error cargando productos:', error);
         Alert.alert('Error', 'No se pudieron cargar los productos');
-      } else {
-        setProducts(data || []);
+        return;
       }
+
+      console.log(`Cargados ${data?.length || 0} productos`);
+      
+      const productsData = data || [];
+      setProducts(productsData);
+      
+      // Procesar imágenes después de cargar productos
+      await processProductImages(productsData);
+      
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error general:', error);
       Alert.alert('Error', 'Ocurrió un error inesperado');
     } finally {
       setLoading(false);
@@ -83,10 +171,6 @@ export default function InventoryTable() {
     (product.empresa && product.empresa.toLowerCase().includes(search.toLowerCase())) ||
     (product.grupo && product.grupo.toLowerCase().includes(search.toLowerCase()))
   );
-  // Función para obtener imagen por defecto
-  const getDefaultImage = () => {
-    return 'https://via.placeholder.com/80x80/cccccc/666666?text=Sin+Imagen';
-  };
 
   // Función para formatear el precio
   const formatPrice = (price: number | null) => {
@@ -102,6 +186,54 @@ export default function InventoryTable() {
       month: '2-digit',
       year: 'numeric',
     });
+  };
+
+  // Componente de imagen con manejo de errores MEJORADO
+  const ProductImage = ({ productId }: { productId: string }) => {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoading, setImageLoading] = useState(false);
+    const imageUri = imageUris[productId];
+
+    console.log(`Renderizando imagen para producto ${productId}:`, {
+      hasImageUri: !!imageUri,
+      imageError,
+      imageLoading
+    });
+
+    // Mostrar placeholder si hay error o no hay imagen
+    if (imageError || !imageUri) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <Text style={styles.placeholderText}>📷</Text>
+          <Text style={styles.placeholderSubText}>Sin Imagen</Text>
+        </View>
+      );
+    }
+
+    // Mostrar loading mientras carga
+    if (imageLoading) {
+      return (
+        <View style={styles.placeholderContainer}>
+          <ActivityIndicator size="small" color="#1976D2" />
+          <Text style={styles.placeholderSubText}>Cargando...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <Image 
+        source={{ uri: imageUri }} 
+        style={styles.image}
+        onError={(error) => {
+          console.error(`Error cargando imagen para producto ${productId}:`, error);
+          setImageError(true);
+        }}
+        onLoadStart={() => setImageLoading(true)}
+        onLoad={() => setImageLoading(false)}
+        onLoadEnd={() => setImageLoading(false)}
+        resizeMode="cover"
+      />
+    );
   };
 
   if (loading) {
@@ -137,11 +269,7 @@ export default function InventoryTable() {
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={styles.row}>
-              <Image 
-                source={{ uri: item.imagen_url || getDefaultImage() }} 
-                style={styles.image}
-                defaultSource={{ uri: getDefaultImage() }}
-              />
+              <ProductImage productId={item.id} />
               <View style={styles.info}>
                 <Text style={styles.name}>{item.nombre}</Text>
                 <Text style={styles.detail}>
@@ -177,16 +305,19 @@ export default function InventoryTable() {
             {expanded.includes(item.id) && (
               <View style={styles.extra}>
                 <Text style={styles.extraText}>
-                  grupo: {item.grupo || 'No especificada'}
+                  Grupo: {item.grupo || 'No especificado'}
                 </Text>
                 <Text style={styles.extraText}>
-                  Código de Barras: {item.barcode || 'No especificado'}
+                  Código de barras: {item.barcode || 'No especificado'}
                 </Text>
                 <Text style={styles.extraText}>
-                  Fecha de Creación: {formatDate(item.fecha_creacion)}
+                  Características: {item.caracteristicas || 'No especificadas'}
                 </Text>
                 <Text style={styles.extraText}>
-                  Última Actualización: {formatDate(item.fecha_actualizacion)}
+                  Fecha de creación: {formatDate(item.fecha_creacion)}
+                </Text>
+                <Text style={styles.extraText}>
+                  Última actualización: {formatDate(item.fecha_actualizacion)}
                 </Text>
               </View>
             )}
@@ -238,7 +369,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)', // capa translúcida
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -264,6 +394,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 4,
+  },
+   placeholderContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  placeholderText: {
+    fontSize: 24,
+    color: '#999',
+  },
+  placeholderSubText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
   },
   detail: {
     fontSize: 14,
