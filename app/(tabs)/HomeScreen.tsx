@@ -29,9 +29,9 @@ type TopProduct = {
   name: string;
   grupo?: string;
   id: string;
-  fechaVenta: string;
   totalSold: number;
   cantidadVendida: number;
+  empresa: string;
 };
 
 export default function HomeScreen() {
@@ -48,7 +48,7 @@ export default function HomeScreen() {
       const { data, error } = await supabase
         .from('productos')
         .select('id, nombre, cantidad')
-        .lt('cantidad', 3) // Productos con menos de 10 unidades
+        .lte('cantidad', 3) // Productos con menos de 10 unidades
         .order('cantidad', { ascending: true });
 
       if (error) throw error;
@@ -99,16 +99,17 @@ export default function HomeScreen() {
   const fetchTopProduct = async () => {
     try {
       const { data, error } = await supabase
-        .from('vista_productos_mas_vendido').select("*")
+        .from('vista_productos_mas_vendidos').select("*")
 
       if (error) throw error;
+      console.log(data)
       setTopProduct({
         name: data[0]?.nombre || 'Sin datos',
-        grupo: data[0]?.grupo || 'Sin grupo',
-        fechaVenta: data[0]?.fecha_venta || 'Sin fecha',
+        grupo: data[0]?.categoria || 'Sin grupo',
         id: data[0]?.product_id || 'Sin ID',
-        cantidadVendida: data[0]?.cantidad_vendida || 0,
-        totalSold: data[0]?.total || 0,
+        empresa: data[0]?.empresa || 'Sin empresa',
+        cantidadVendida: data[0]?.cantidad_total_vendida || 0,
+        totalSold: data[0]?.ingresos_totales || 0,
       });
     } catch (err) {
       Alert.alert("Error", "No se pudo obtener el producto más vendido");
@@ -117,7 +118,6 @@ export default function HomeScreen() {
         name: 'Sin datos',
         totalSold: 0,
         id: 'Sin ID',
-        fechaVenta: 'Sin fecha',
         grupo: 'Sin grupo',
         cantidadVendida: 0,
       });
@@ -202,9 +202,9 @@ export default function HomeScreen() {
 
         <Card
           icon="whatshot"
-          title={`Producto más vendido en la fecha ${topProduct?.fechaVenta.slice(0,10)} - (${topProduct?.grupo})`}
-          value={topProduct?.name || 'Sin datos'}
-          subtitle={`${topProduct?.cantidadVendida} ${topProduct?.cantidadVendida === 1 ? "cantidad": "cantidades"} - precio de venta: ${topProduct?.totalSold}`}
+          title={`Producto más vendido Hoy`}
+          value={topProduct?.grupo + ' - ' + topProduct?.name || 'Sin datos'}
+          subtitle={`${topProduct?.empresa} - ${topProduct?.cantidadVendida} ${topProduct?.cantidadVendida === 1 ? "cantidad": "cantidades"} - precio de venta: ${topProduct?.totalSold}`}
           color="#2196F3"
         />
       </ScrollView>
