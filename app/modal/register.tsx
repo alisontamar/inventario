@@ -12,15 +12,10 @@ import {
 import {
   CameraView, BarcodeScanningResult, useCameraPermissions
 } from "expo-camera";
-<<<<<<< HEAD
-import * as FileSystem from 'expo-file-system';
-import {supabase} from '@/constants/supabase';
-=======
 import { supabase } from "@/constants/supabase";
->>>>>>> 8fe641ab7ca450b69601d4c3844a43264d642608
 import * as Notifications from 'expo-notifications';
-import Manual from "./manual";
-import BackButton from "../components/BackButton";
+import Manual from "@/app/modal/manual";
+import BackButton from "@/app/components/BackButton";
 
 export default function RegisterModal() {
   const [step, setStep] = useState<"choose" | "record" | "verify" | "scan">("choose");
@@ -90,290 +85,98 @@ export default function RegisterModal() {
     return dateString;
   };
 
-<<<<<<< HEAD
-// Función para subir imagen a Supabase Storage (CORREGIDA)
-const subirImagen = async (uri: string): Promise<Blob | null> => {
-  try {
-    if (!uri) {
-      console.log('No hay URI de imagen');
-      return null;
-    }
-
-    console.log('Procesando imagen con URI:', uri);
-
-    // Leer el archivo como blob directamente
-    const response = await fetch(uri);
-    const blob = await response.blob();
-
-    console.log('Imagen convertida a blob, tamaño:', blob.size, 'bytes');
-    console.log('Tipo MIME:', blob.type);
-    
-    return blob;
-
-  } catch (error) {
-    console.error('Error procesando imagen:', error);
-    Alert.alert('Error', 'Ocurrió un error al procesar la imagen');
-    return null;
-  }
-};
-
-// Función para insertar producto con imagen como blob
-const insertarProducto = async (productData: any, imagenUri: string) => {
-  try {
-    // Procesar la imagen como blob
-    const imagenBlob = await subirImagen(imagenUri);
-    
-    if (!imagenBlob) {
-      Alert.alert('Error', 'No se pudo procesar la imagen');
-      return;
-    }
-
-    // Insertar en la base de datos con blob
-    const { data, error } = await supabase
-      .from('productos')
-      .insert([
-        {
-          ...productData,
-          imagen_blob: imagenBlob, // Columna de tipo bytea en PostgreSQL
-        }
-      ]);
-
-    if (error) {
-      console.error('Error insertando producto:', error);
-      Alert.alert('Error', 'No se pudo guardar el producto');
-      return;
-    }
-
-    console.log('Producto guardado exitosamente');
-    Alert.alert('Éxito', 'Producto guardado correctamente');
-
-  } catch (error) {
-    console.error('Error en insertarProducto:', error);
-    Alert.alert('Error', 'Ocurrió un error inesperado');
-  }
-};
-
-// Función para leer imagen desde blob
-const obtenerImagenDesdeBlob = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      resolve(reader.result as string);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
-
-// Función para mostrar imagen desde blob
-const MostrarImagenBlob = ({ imagenBlob }: { imagenBlob: Blob }) => {
-  const [imagenUri, setImagenUri] = useState<string | null>(null);
-
-  useEffect(() => {
-    const cargarImagen = async () => {
-      try {
-        const uri = await obtenerImagenDesdeBlob(imagenBlob);
-        setImagenUri(uri);
-      } catch (error) {
-        console.error('Error cargando imagen:', error);
-      }
-    };
-
-    cargarImagen();
-  }, [imagenBlob]);
-
-  if (!imagenUri) {
-    return <Text>Cargando imagen...</Text>;
-  }
-
-  return (
-    <Image
-      source={{ uri: imagenUri }}
-      style={{ width: 200, height: 200 }}
-      resizeMode="contain"
-    />
-  );
-};
-// Funciones para guardar en la base de datos
-const guardarProducto = async () => {
+  // Funciones para guardar en la base de datos
+  const guardarProducto = async () => {
   try {
     setIsLoading(true);
 
-    // Validaciones iniciales
     if (!form.nombre) {
       Alert.alert("Error", "El nombre del producto es requerido");
       return;
     }
 
-    const cantidad = parseInt(form.cantidad, 10);
-    if (isNaN(cantidad)) {
-      Alert.alert("Error", "Cantidad inválida");
-      return;
-    }
-
-    // Validar y formatear fecha si existe
+    // Validar fecha de vencimiento si se proporcionó
     let fechaVencimientoFormatted = null;
     if (form.fechaVencimiento) {
       fechaVencimientoFormatted = formatDateForDB(form.fechaVencimiento);
       if (!fechaVencimientoFormatted) {
         Alert.alert("Error", "Formato de fecha inválido. Usa DD/MM/YYYY");
-=======
-  // Funciones para guardar en la base de datos
-  const guardarProducto = async () => {
-    try {
-      setIsLoading(true);
-
-      if (!form.nombre) {
-        Alert.alert("Error", "El nombre del producto es requerido");
->>>>>>> 8fe641ab7ca450b69601d4c3844a43264d642608
-        return;
-      }
-
-<<<<<<< HEAD
-    // Verificar si ya existe el producto por código de barras
-    const { data: existingProduct, error: searchError } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('barcode', form.barcode);
-
-    if (searchError && searchError.code !== 'PGRST116') {
-      console.error('Error buscando producto existente:', searchError);
-      Alert.alert("Error", "Error al verificar producto existente");
-      return;
-    }
-
-    // Procesar imagen si hay una
-    let imagen_blob = null;
-    if (photo) {
-      imagen_blob = await subirImagen(photo); // Ahora retorna un Blob
-      if (!imagen_blob) {
-        Alert.alert("Error", "No se pudo procesar la imagen");
         return;
       }
     }
 
-    // Si el producto YA EXISTE → AUMENTAR cantidad
-    if (existingProduct && existingProduct.length > 0) {
-      const productoExistente = existingProduct[0];
-      const cantidadExistente = productoExistente.cantidad || 0;
-      const nuevaCantidad = cantidadExistente + cantidad;
+    // Verificar si ya existe un producto similar (por barcode o nombre + empresa)
+    // Solo buscar si hay barcode
+    let existingProduct = null;
+    if (form.barcode) {
+      const { data, error: searchError } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('barcode', form.barcode)
+        .single(); // Usar .single() para obtener un objeto, no un array
 
-      // Preparar datos para actualización
-      const updateData = { cantidad: nuevaCantidad };
+      if (searchError) {
+        // Si el error es PGRST116, significa que no se encontró el producto
+        if (searchError.code !== 'PGRST116') {
+          console.error('Error buscando producto existente:', searchError);
+          Alert.alert("Error", "Error al verificar producto existente");
+          return;
+        }
+        // Si es PGRST116, continuamos con existingProduct = null
+      } else {
+        existingProduct = data;
+      }
+    }
+
+    if (existingProduct) {
+      // El producto existe, actualizar
+      const nuevaCantidad = (existingProduct.cantidad || 0) + (form.cantidad ? parseInt(form.cantidad) : 0);
       
-      // Si hay nueva imagen, también actualizarla
-      if (imagen_blob) {
-        updateData.imagen_blob = imagen_blob;
-      }
+      const updateData = {
+        cantidad: nuevaCantidad,
+        ...(form.precioDeVenta && { precio_venta: parseFloat(form.precioDeVenta) }),
+        ...(form.precioDeCompra && { precio_compra: parseFloat(form.precioDeCompra) }),
+        ...(fechaVencimientoFormatted && { fecha_vencimiento: fechaVencimientoFormatted }),
+      };
 
       const { error: updateError } = await supabase
-        .from("productos")
+        .from('productos')
         .update(updateData)
-        .eq("barcode", form.barcode);
+        .eq('id', existingProduct.id);
 
       if (updateError) {
-        console.error("Error al actualizar cantidad:", updateError);
+        console.error('Error actualizando producto:', updateError);
         Alert.alert("Error", "No se pudo actualizar el producto");
-        return;
+      } else {
+        Alert.alert(
+          "Producto Actualizado",
+          `Se actualizaron ${form.cantidad || 0} unidades y datos del producto existente.`
+        );
+        reset();
       }
-
-      Alert.alert("Éxito", `Cantidad actualizada. Nueva cantidad: ${nuevaCantidad}`);
     } else {
-      // Si el producto NO EXISTE → CREAR uno nuevo
-      const { error: insertError } = await supabase.from("productos").insert([{
-        nombre: form.nombre,
-        empresa: form.empresa || null,
-        grupo: form.grupo || null,
-        precio_venta: form.precioDeVenta ? parseFloat(form.precioDeVenta) : null,
-        precio_compra: form.precioDeCompra ? parseFloat(form.precioDeCompra) : null,
-        cantidad: cantidad,
-        barcode: form.barcode || null,
-        imagen_blob: imagen_blob, // Cambié de imagen_blob a imagen_blob
-        fecha_vencimiento: fechaVencimientoFormatted || null,
-      }]);
+      // El producto no existe, crear uno nuevo
+      const { data, error } = await supabase
+        .from('productos')
+        .insert([{
+          nombre: form.nombre,
+          empresa: form.empresa || null,
+          grupo: form.grupo || null,
+          precio_venta: form.precioDeVenta ? parseFloat(form.precioDeVenta) : null,
+          precio_compra: form.precioDeCompra ? parseFloat(form.precioDeCompra) : null,
+          cantidad: form.cantidad ? parseInt(form.cantidad) : 0,
+          barcode: form.barcode || null,
+          fecha_vencimiento: fechaVencimientoFormatted
+        }]);
 
-      if (insertError) {
-        console.error("Error al insertar producto:", insertError);
+      if (error) {
+        console.error('Error guardando producto:', error);
         Alert.alert("Error", "No se pudo guardar el producto");
-        return;
+      } else {
+        Alert.alert("Éxito", "Producto guardado correctamente");
+        reset();
       }
-
-      Alert.alert("Éxito", "Producto nuevo creado correctamente");
     }
-
-    // Limpiar el formulario después de guardar exitosamente
-    // resetForm(); // Si tienes una función para resetear el formulario
-    
-  } catch (error) {
-    console.error("Error en guardarProducto:", error);
-    Alert.alert("Error", "Ocurrió un error inesperado");
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-
-
-const guardarVenta = async () => {
-  try {
-    setIsLoading(true);
-
-    if (!form.nombre || !form.cantidad || !form.precioDeVenta) {
-      Alert.alert("Error", "Todos los campos son requeridos para la venta");
-      return;
-    }
-
-    const { data: productos, error: searchError } = await supabase
-      .from('productos')
-      .select('id, cantidad')
-      .eq('nombre', form.nombre)
-      .single();
-
-    if (!productos || searchError) {
-      console.log(searchError)
-      Alert.alert("Error", "Producto no encontrado");
-      return;
-    }
-
-    const cantidadVenta = parseInt(form.cantidad);
-    const nuevoStock = productos.cantidad - cantidadVenta;
-
-    if (nuevoStock < 0) {
-      Alert.alert("Stock insuficiente", `Solo hay ${productos.cantidad} unidades disponibles`);
-      return;
-    }
-
-    // Notificación si el stock baja de 3
-    if (nuevoStock < 3) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "📦 ¡Stock bajo!",
-          body: `Quedan solo ${nuevoStock} unidades del producto "${form.nombre}"`,
-          sound: true,
-          priority: Notifications.AndroidNotificationPriority.HIGH
-        },
-        trigger: null,
-      });
-    }
-
-    // Registrar la venta
-    const { error } = await supabase
-      .from('ventas')
-      .insert([{
-        producto_id: productos.id,
-        nombre_producto: form.nombre,
-        cantidad: cantidadVenta,
-        precio_venta: parseFloat(form.precioDeVenta),
-      }]);
-
-    if (error) {
-      console.error('Error guardando venta:', error);
-      Alert.alert("Error", "No se pudo guardar la venta");
-    } else {
-      Alert.alert("Éxito", "Venta registrada correctamente");
-      reset();
-    }
-
   } catch (error) {
     console.error('Error:', error);
     Alert.alert("Error", "Ocurrió un error inesperado");
@@ -381,85 +184,6 @@ const guardarVenta = async () => {
     setIsLoading(false);
   }
 };
-
-=======
-      // Validar fecha de vencimiento si se proporcionó
-      let fechaVencimientoFormatted = null;
-      if (form.fechaVencimiento) {
-        fechaVencimientoFormatted = formatDateForDB(form.fechaVencimiento);
-        if (!fechaVencimientoFormatted) {
-          Alert.alert("Error", "Formato de fecha inválido. Usa DD/MM/YYYY");
-          return;
-        }
-      }
-
-      // Verificar si ya existe un producto similar (por barcode o nombre + empresa)
-      const { data: existingProduct, error: searchError } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('barcode', form.barcode)
-
-      if (searchError && searchError.code !== 'PGRST116') {
-        console.error('Error buscando producto existente:', searchError);
-        Alert.alert("Error", "Error al verificar producto existente");
-        return;
-      }
-
-      if (existingProduct) {
-        const nuevaCantidad = (existingProduct[0].cantidad || 0) + (form.cantidad ? parseInt(form.cantidad) : 0);
-        // console.log(existingProduct);
-        const updateData = {
-          cantidad: nuevaCantidad,
-          ...(form.precioDeVenta && { precio_venta: parseFloat(form.precioDeVenta) }),
-          ...(form.precioDeCompra && { precio_compra: parseFloat(form.precioDeCompra) }),
-          ...(fechaVencimientoFormatted && { fecha_vencimiento: fechaVencimientoFormatted }),
-        };
-        const { error: updateError } = await supabase
-          .from('productos')
-          .update(updateData)
-          .eq('id', existingProduct[0].id);
-
-        if (updateError) {
-          console.error('Error actualizando producto:', updateError);
-          Alert.alert("Error", "No se pudo actualizar el producto");
-        } else {
-          Alert.alert(
-            "Producto Actualizado",
-            `Se actualizaron ${form.cantidad || 0} unidades y datos del producto existente.`
-          );
-          reset();
-        }
-      }
-      else {
-        // El producto no existe, crear uno nuevo
-        const { data, error } = await supabase
-          .from('productos')
-          .insert([{
-            nombre: form.nombre,
-            empresa: form.empresa || null,
-            grupo: form.grupo || null,
-            precio_venta: form.precioDeVenta ? parseFloat(form.precioDeVenta) : null,
-            precio_compra: form.precioDeCompra ? parseFloat(form.precioDeCompra) : null,
-            cantidad: form.cantidad ? parseInt(form.cantidad) : 0,
-            barcode: form.barcode || null,
-            fecha_vencimiento: fechaVencimientoFormatted
-          }]);
-
-        if (error) {
-          console.error('Error guardando producto:', error);
-          Alert.alert("Error", "No se pudo guardar el producto");
-        } else {
-          Alert.alert("Éxito", "Producto guardado correctamente");
-          reset();
-        }
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      Alert.alert("Error", "Ocurrió un error inesperado");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const guardarVenta = async () => {
     try {
@@ -527,7 +251,6 @@ const guardarVenta = async () => {
       setIsLoading(false);
     }
   };
->>>>>>> 8fe641ab7ca450b69601d4c3844a43264d642608
 
   const confirmarGuardado = async () => {
     setConfirmVisible(false);

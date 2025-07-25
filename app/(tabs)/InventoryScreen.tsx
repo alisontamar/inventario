@@ -21,10 +21,6 @@ interface Product {
   precio_venta: number | null;
   precio_compra: number | null;
   cantidad: number;
-<<<<<<< HEAD
-  imagen_blob: ArrayBuffer | null;
-=======
->>>>>>> 8fe641ab7ca450b69601d4c3844a43264d642608
   caracteristicas: string | null;
   grupo: string | null;
   barcode: string | null;
@@ -174,11 +170,7 @@ export default function InventoryTable() {
     (product.empresa && product.empresa.toLowerCase().includes(search.toLowerCase())) ||
     (product.grupo && product.grupo.toLowerCase().includes(search.toLowerCase()))
   );
-<<<<<<< HEAD
-
-=======
   
->>>>>>> 8fe641ab7ca450b69601d4c3844a43264d642608
   // Función para formatear el precio
   const formatPrice = (price: number | null) => {
     if (price === null) return 'N/A';
@@ -277,10 +269,6 @@ export default function InventoryTable() {
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={styles.row}>
-<<<<<<< HEAD
-              <ProductImage productId={item.id} />
-=======
->>>>>>> 8fe641ab7ca450b69601d4c3844a43264d642608
               <View style={styles.info}>
                 <Text style={styles.name}>{item.nombre}</Text>
                 <Text style={styles.detail}>
