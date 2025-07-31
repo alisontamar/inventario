@@ -2,17 +2,16 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  Modal,
   ActivityIndicator,
 } from "react-native";
 import { MaterialIcons, Entypo, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import { Link } from "expo-router";
 import { supabase } from "@/constants/supabase"; // Ajusta la ruta según tu estructura
-import { Alert } from "react-native";
+import { Alert, ScrollView , Modal } from "react-native";
 import Constants from 'expo-constants';
+
 // Tipos para TypeScript
 type LowStockProduct = {
   id: string;
@@ -102,6 +101,7 @@ export default function HomeScreen() {
         .from('vista_productos_mas_vendidos').select("*")
 
       if (error) throw error;
+
       setTopProduct({
         name: data[0]?.nombre || 'Sin datos',
         grupo: data[0]?.categoria || 'Sin grupo',
@@ -112,7 +112,6 @@ export default function HomeScreen() {
       });
     } catch (err) {
       Alert.alert("Error", "No se pudo obtener el producto más vendido");
-      // Si no hay datos, establecer un valor por defecto
       setTopProduct({
         name: 'Sin nombre',
         grupo: 'Sin grupo',
@@ -186,7 +185,6 @@ export default function HomeScreen() {
           <MaterialIcons name="refresh" size={28} color="#2196F3" />
         </TouchableOpacity>
       </View>
-
       <ScrollView contentContainerStyle={styles.cardContainer}>
         <Card
           icon="trending-up"
@@ -204,12 +202,11 @@ export default function HomeScreen() {
           icon="whatshot"
           title={`Producto más vendido Hoy`}
           value={topProduct?.grupo + ' - ' + topProduct?.name || 'Sin datos'}
-          subtitle={`${topProduct?.empresa} - ${topProduct?.cantidadVendida} ${topProduct?.cantidadVendida === 1 ? "cantidad": "cantidades"} - precio de venta: ${topProduct?.totalSold}`}
+          subtitle={`${topProduct?.empresa} - ${topProduct?.cantidadVendida} ${topProduct?.cantidadVendida === 1 ? "cantidad" : "cantidades"} - precio de venta: ${topProduct?.totalSold}`}
           color="#2196F3"
         />
       </ScrollView>
 
-      {/* Modal desplegable de todos los productos */}
       <Modal
         animationType="slide"
         visible={modalVisible}
@@ -278,7 +275,6 @@ type LowStockListCardProps = {
 
 function LowStockListCard({ products, onPressMore }: LowStockListCardProps) {
   const visibleItems = products.slice(0, 3); // mostrar máximo 3
-
   return (
     <View style={[styles.card, { borderLeftColor: "#F44336" }]}>
       <MaterialIcons name="warning" size={28} color="#F44336" />

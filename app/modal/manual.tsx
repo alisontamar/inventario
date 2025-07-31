@@ -10,10 +10,10 @@ export default function Manual({ onClose, isVisible }: { isVisible: boolean, onC
                     flexDirection: "row", justifyContent: "flex-end", borderWidth: 1,
                     padding: 10, borderRadius: 10, marginBottom: 10,
                     alignSelf: "flex-end",
-                    borderColor: !isVisible ? "#ebf13fff" : "#e0e0e0"
+                    borderColor: !isVisible ? "#7ec9f4ff" : "#e0e0e0"
                 }}>
                     <TouchableOpacity onPress={onClose}>
-                        <Text style= {{fontSize: 16, color: "#fff", textAlign: "center"}}>Cerrar</Text>
+                        <Text style={{ fontSize: 16, color: "#fff", textAlign: "center" }}>Cerrar</Text>
                     </TouchableOpacity>
                 </View>
                 <View style={{ gap: 24 }}>
@@ -53,6 +53,11 @@ export default function Manual({ onClose, isVisible }: { isVisible: boolean, onC
                             <Text style={{ fontStyle: "italic", color: "#1e3a8a" }}>"nombre jabón azul"</Text>
                             <Text style={{ fontStyle: "italic", color: "#1e3a8a" }}>"precio de venta 1500"</Text>
                             <Text style={{ fontStyle: "italic", color: "#1e3a8a" }}>"precio de compra 900"</Text>
+                            <Text style={{ fontStyle: "italic", color: "#1e3a8a" }}>"fecha de vencimiento tres de agosto de 2023"</Text>
+                            <Text style={{ color: "#7c7c17ff", marginTop: 10 }}>
+                                ⚠️ El sistema no reconoce "primero" o "segundo" como fechas. 
+                                Usa solo números para días y meses, para esos casos.
+                            </Text>
                         </View>
                     </View>
 
@@ -89,7 +94,8 @@ export default function Manual({ onClose, isVisible }: { isVisible: boolean, onC
                         borderColor: "#bbf7d0",
                         borderWidth: 1,
                         borderRadius: 12,
-                        padding: 16
+                        padding: 16,
+                        marginBottom: 10
                     }}>
                         <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
                             <Feather name="check-circle" size={20} color="#15803d" />
@@ -105,6 +111,7 @@ export default function Manual({ onClose, isVisible }: { isVisible: boolean, onC
                         <Text style={{ color: "#064e3b" }}>✅ Habla claro y pausado.</Text>
                         <Text style={{ color: "#064e3b" }}>✅ Usa las palabras clave exactamente como están.</Text>
                     </View>
+
                 </View>
             </ScrollView>
         </Modal>

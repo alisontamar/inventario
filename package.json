@@ -39,7 +39,8 @@
     "react-native-screens": "~4.11.1",
     "react-native-toast-message": "^2.3.3",
     "react-native-web": "~0.20.0",
-    "expo-notifications": "~0.31.4"
+    "expo-notifications": "~0.31.4",
+    "@react-native-picker/picker": "2.11.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

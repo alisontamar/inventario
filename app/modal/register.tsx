@@ -1,34 +1,34 @@
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TextInput, ScrollView, Alert,
-  Pressable
+  Pressable,
 } from "react-native";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent
 } from "expo-speech-recognition";
-import {
-  CameraView, BarcodeScanningResult, useCameraPermissions
-} from "expo-camera";
-import { supabase } from "@/constants/supabase";
+import { useCameraPermissions } from "expo-camera";
+import Constants from "expo-constants";
 import * as Notifications from 'expo-notifications';
+import { supabase } from "@/constants/supabase";
 import Manual from "@/app/modal/manual";
+import Scanner, { ButtonScanner } from "@/app/components/Scanner";
 import BackButton from "@/app/components/BackButton";
-
+import { formatDateForDB } from "@/app/utils/formatDate";
+import { useScanner } from "../hooks/useScanner";
+import { Picker } from "@react-native-picker/picker";
 export default function RegisterModal() {
   const [step, setStep] = useState<"choose" | "record" | "verify" | "scan">("choose");
   const [type, setType] = useState<"inventory" | "sale" | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [scanned, setScanned] = useState(false);
-  const [scannedData, setScannedData] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const cameraRef = useRef<CameraView>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recognitionResults, setRecognitionResults] = useState<string[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const { scannedData } = useScanner();
   const [voiceData, setVoiceData] = useState({
     nombre: "", empresa: "", grupo: "",
     precioDeVenta: "", precioDeCompra: "",
@@ -40,150 +40,169 @@ export default function RegisterModal() {
     cantidad: "", barcode: "", fechaVencimiento: ""
   });
   const [permission, requestPermission] = useCameraPermissions();
+  const [products, setProducts] = useState<any[]>([]);
 
-  // Función para formatear fecha (YYYY-MM-DD)
-  const formatDateForDB = (dateString: string): string | null => {
-    if (!dateString) return null;
+  const getNamesProducts = async () => {
+    if (type !== "sale") return;
 
-    // Si ya está en formato YYYY-MM-DD, devolverlo
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      return dateString;
-    }
+    const { data, error } = await supabase
+      .from('productos')
+      .select('nombre, id')
+      .order('nombre', { ascending: true });
 
-    // Si está en formato DD/MM/YYYY, convertir
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
-      const [day, month, year] = dateString.split('/');
-      return `${year}-${month}-${day}`;
-    }
+    if (error) throw error;
 
-    // Si está en formato DD-MM-YYYY, convertir
-    if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
-      const [day, month, year] = dateString.split('-');
-      return `${year}-${month}-${day}`;
-    }
+    const formattedData = data?.map(product => ({
+      id: product.id,
+      name: product.nombre,
+    }));
 
-    return null;
+    setProducts(formattedData);
   };
+
   useEffect(() => {
     Notifications.requestPermissionsAsync().then(({ status }) => {
       if (status !== 'granted') {
         Alert.alert("Permiso requerido", "Necesitas habilitar notificaciones para recibir alertas de stock");
       }
     });
+    const setupComponent = async () => {
+      try {
+        await requestPermission();
+
+        // Verificar si el reconocimiento de voz está disponible
+        const available = await ExpoSpeechRecognitionModule.getStateAsync();
+        console.log("Speech recognition state:", available);
+
+        // Solicitar permisos de audio
+        const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        console.log("Audio permissions:", status);
+
+        if (status !== 'granted') {
+          Alert.alert(
+            "Permisos necesarios",
+            "Se necesitan permisos de micrófono para el reconocimiento de voz"
+          );
+        }
+      } catch (error) {
+        console.error("Error setting up component:", error);
+      }
+    };
+
+    setupComponent();
+    getNamesProducts();
+    return () => {
+      if (isRecording || isListening) {
+        ExpoSpeechRecognitionModule.stop().catch(console.error);
+      }
+    };
   }, []);
 
-  // Función para formatear fecha para mostrar (DD/MM/YYYY)
-  const formatDateForDisplay = (dateString: string): string => {
-    if (!dateString) return "";
-
-    // Si está en formato YYYY-MM-DD, convertir a DD/MM/YYYY
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      const [year, month, day] = dateString.split('-');
-      return `${day}/${month}/${year}`;
+  useEffect(() => {
+    if (scannedData) {
+      setForm(prev => ({ ...prev, barcode: scannedData }));
     }
-
-    return dateString;
-  };
+  }, [scannedData]);
 
   // Funciones para guardar en la base de datos
   const guardarProducto = async () => {
-  try {
-    setIsLoading(true);
+    try {
+      setIsLoading(true);
 
-    if (!form.nombre) {
-      Alert.alert("Error", "El nombre del producto es requerido");
-      return;
-    }
-
-    // Validar fecha de vencimiento si se proporcionó
-    let fechaVencimientoFormatted = null;
-    if (form.fechaVencimiento) {
-      fechaVencimientoFormatted = formatDateForDB(form.fechaVencimiento);
-      if (!fechaVencimientoFormatted) {
-        Alert.alert("Error", "Formato de fecha inválido. Usa DD/MM/YYYY");
+      if (!form.nombre) {
+        Alert.alert("Error", "El nombre del producto es requerido");
         return;
       }
-    }
 
-    // Verificar si ya existe un producto similar (por barcode o nombre + empresa)
-    // Solo buscar si hay barcode
-    let existingProduct = null;
-    if (form.barcode) {
-      const { data, error: searchError } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('barcode', form.barcode)
-        .single(); // Usar .single() para obtener un objeto, no un array
-
-      if (searchError) {
-        // Si el error es PGRST116, significa que no se encontró el producto
-        if (searchError.code !== 'PGRST116') {
-          console.error('Error buscando producto existente:', searchError);
-          Alert.alert("Error", "Error al verificar producto existente");
+      // Validar fecha de vencimiento si se proporcionó
+      let fechaVencimientoFormatted = null;
+      if (form.fechaVencimiento) {
+        fechaVencimientoFormatted = formatDateForDB(form.fechaVencimiento);
+        if (!fechaVencimientoFormatted) {
+          Alert.alert("Error", "Formato de fecha inválido. Usa DD/MM/YYYY");
           return;
         }
-        // Si es PGRST116, continuamos con existingProduct = null
-      } else {
-        existingProduct = data;
       }
+
+      // Verificar si ya existe un producto similar (por barcode o nombre + empresa)
+      // Solo buscar si hay barcode
+      let existingProduct = null;
+      if (form.barcode) {
+        const { data, error: searchError } = await supabase
+          .from('productos')
+          .select('*')
+          .eq('barcode', form.barcode)
+          .single(); // Usar .single() para obtener un objeto, no un array
+
+        if (searchError) {
+          // Si el error es PGRST116, significa que no se encontró el producto
+          if (searchError.code !== 'PGRST116') {
+            console.error('Error buscando producto existente:', searchError);
+            Alert.alert("Error", "Error al verificar producto existente");
+            return;
+          }
+          // Si es PGRST116, continuamos con existingProduct = null
+        } else {
+          existingProduct = data;
+        }
+      }
+
+      if (existingProduct) {
+        // El producto existe, actualizar
+        const nuevaCantidad = (existingProduct.cantidad || 0) + (form.cantidad ? parseInt(form.cantidad) : 0);
+
+        const updateData = {
+          cantidad: nuevaCantidad,
+          ...(form.precioDeVenta && { precio_venta: parseFloat(form.precioDeVenta) }),
+          ...(form.precioDeCompra && { precio_compra: parseFloat(form.precioDeCompra) }),
+          ...(fechaVencimientoFormatted && { fecha_vencimiento: fechaVencimientoFormatted }),
+        };
+
+        const { error: updateError } = await supabase
+          .from('productos')
+          .update(updateData)
+          .eq('id', existingProduct.id);
+
+        if (updateError) {
+          console.error('Error actualizando producto:', updateError);
+          Alert.alert("Error", "No se pudo actualizar el producto");
+        } else {
+          Alert.alert(
+            "Producto Actualizado",
+            `Se actualizaron ${form.cantidad || 0} unidades y datos del producto existente.`
+          );
+          reset();
+        }
+      } else {
+        // El producto no existe, crear uno nuevo
+        const { data, error } = await supabase
+          .from('productos')
+          .insert([{
+            nombre: form.nombre,
+            empresa: form.empresa || null,
+            grupo: form.grupo || null,
+            precio_venta: form.precioDeVenta ? parseFloat(form.precioDeVenta) : null,
+            precio_compra: form.precioDeCompra ? parseFloat(form.precioDeCompra) : null,
+            cantidad: form.cantidad ? parseInt(form.cantidad) : 0,
+            barcode: form.barcode || null,
+            fecha_vencimiento: fechaVencimientoFormatted
+          }]);
+
+        if (error) {
+          console.error('Error guardando producto:', error);
+          Alert.alert("Error", "No se pudo guardar el producto");
+        } else {
+          Alert.alert("Éxito", "Producto guardado correctamente");
+          reset();
+        }
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      Alert.alert("Error", "Ocurrió un error inesperado");
+    } finally {
+      setIsLoading(false);
     }
-
-    if (existingProduct) {
-      // El producto existe, actualizar
-      const nuevaCantidad = (existingProduct.cantidad || 0) + (form.cantidad ? parseInt(form.cantidad) : 0);
-      
-      const updateData = {
-        cantidad: nuevaCantidad,
-        ...(form.precioDeVenta && { precio_venta: parseFloat(form.precioDeVenta) }),
-        ...(form.precioDeCompra && { precio_compra: parseFloat(form.precioDeCompra) }),
-        ...(fechaVencimientoFormatted && { fecha_vencimiento: fechaVencimientoFormatted }),
-      };
-
-      const { error: updateError } = await supabase
-        .from('productos')
-        .update(updateData)
-        .eq('id', existingProduct.id);
-
-      if (updateError) {
-        console.error('Error actualizando producto:', updateError);
-        Alert.alert("Error", "No se pudo actualizar el producto");
-      } else {
-        Alert.alert(
-          "Producto Actualizado",
-          `Se actualizaron ${form.cantidad || 0} unidades y datos del producto existente.`
-        );
-        reset();
-      }
-    } else {
-      // El producto no existe, crear uno nuevo
-      const { data, error } = await supabase
-        .from('productos')
-        .insert([{
-          nombre: form.nombre,
-          empresa: form.empresa || null,
-          grupo: form.grupo || null,
-          precio_venta: form.precioDeVenta ? parseFloat(form.precioDeVenta) : null,
-          precio_compra: form.precioDeCompra ? parseFloat(form.precioDeCompra) : null,
-          cantidad: form.cantidad ? parseInt(form.cantidad) : 0,
-          barcode: form.barcode || null,
-          fecha_vencimiento: fechaVencimientoFormatted
-        }]);
-
-      if (error) {
-        console.error('Error guardando producto:', error);
-        Alert.alert("Error", "No se pudo guardar el producto");
-      } else {
-        Alert.alert("Éxito", "Producto guardado correctamente");
-        reset();
-      }
-    }
-  } catch (error) {
-    console.error('Error:', error);
-    Alert.alert("Error", "Ocurrió un error inesperado");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   const guardarVenta = async () => {
     try {
@@ -262,59 +281,6 @@ export default function RegisterModal() {
     }
   };
 
-  // Función para buscar producto por código de barras
-  const buscarProductoPorBarcode = async (barcode: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('barcode', barcode)
-        .single();
-
-      if (data && !error) {
-        // Rellenar el formulario con los datos del producto encontrado
-        setForm(prev => ({
-          ...prev,
-          nombre: data.nombre,
-          empresa: data.empresa || "",
-          grupo: data.grupo || "",
-          precioDeVenta: data.precio_venta?.toString() || "",
-          precioDeCompra: data.precio_compra?.toString() || "",
-          cantidad: data.cantidad?.toString() || "",
-          barcode: barcode,
-          fechaVencimiento: data.fecha_vencimiento ? formatDateForDisplay(data.fecha_vencimiento) : ""
-        }));
-
-        setVoiceData(prev => ({
-          ...prev,
-          nombre: data.nombre,
-          empresa: data.empresa || "",
-          grupo: data.grupo || "",
-          precioDeVenta: data.precio_venta?.toString() || "",
-          precioDeCompra: data.precio_compra?.toString() || "",
-          cantidad: data.cantidad?.toString() || "",
-          fechaVencimiento: data.fecha_vencimiento ? formatDateForDisplay(data.fecha_vencimiento) : ""
-        }));
-
-        Alert.alert("Producto encontrado", `Se encontró: ${data.nombre}`);
-      } else {
-        Alert.alert("Producto no encontrado", "Este código de barras no está registrado en el inventario");
-      }
-    } catch (error) {
-      console.error('Error buscando producto:', error);
-      Alert.alert("Error", "Hubo un problema al buscar el producto");
-    }
-  };
-
-  // Función para resetear el escaneo
-  const resetearEscaneo = () => {
-    setScanned(false);
-    setScannedData(null);
-    // Limpiar el código de barras del formulario
-    setForm(prev => ({ ...prev, barcode: "" }));
-    Alert.alert("Escaneo reiniciado", "Ahora puedes escanear otro código de barras");
-  };
-
   // Escuchar eventos de reconocimiento de voz
   useSpeechRecognitionEvent("start", () => {
     console.log("Speech recognition started");
@@ -349,33 +315,6 @@ export default function RegisterModal() {
 
     Alert.alert("Error de reconocimiento", errorMessage);
   });
-
-  useEffect(() => {
-    const setupComponent = async () => {
-      try {
-        await requestPermission();
-
-        // Verificar si el reconocimiento de voz está disponible
-        const available = await ExpoSpeechRecognitionModule.getStateAsync();
-        console.log("Speech recognition state:", available);
-
-        // Solicitar permisos de audio
-        const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-        console.log("Audio permissions:", status);
-
-        if (status !== 'granted') {
-          Alert.alert(
-            "Permisos necesarios",
-            "Se necesitan permisos de micrófono para el reconocimiento de voz"
-          );
-        }
-      } catch (error) {
-        console.error("Error setting up component:", error);
-      }
-    };
-
-    setupComponent();
-  }, []);
 
   const startRecording = async () => {
     try {
@@ -519,10 +458,6 @@ export default function RegisterModal() {
     }
 
     if (type === "sale") {
-      if (lower.includes("nombre")) {
-        const nombreMatch = text.match(/nombre\s+(.+?)(?:\s+cantidad|$)/i);
-        if (nombreMatch) nd.nombre = nombreMatch[1].trim();
-      }
       if (lower.includes("cantidad")) {
         const cantidadMatch = text.match(/cantidad\s+([\d\s.,]+)/i);
         if (cantidadMatch) nd.cantidad = cantidadMatch[1];
@@ -538,15 +473,6 @@ export default function RegisterModal() {
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
 
-  // Cleanup al desmontar el componente
-  useEffect(() => {
-    return () => {
-      if (isRecording || isListening) {
-        ExpoSpeechRecognitionModule.stop().catch(console.error);
-      }
-    };
-  }, []);
-
   if (!permission?.granted) {
     return (
       <View style={styles.centered}>
@@ -558,23 +484,10 @@ export default function RegisterModal() {
     );
   }
 
-  const handleBarCodeScanned = async (result: BarcodeScanningResult) => {
-    if (result.data && !scanned) {
-      setScannedData(result.data);
-      setScanned(true);
-      setForm(prev => ({ ...prev, barcode: result.data }));
-
-      // Buscar producto por código de barras
-      await buscarProductoPorBarcode(result.data);
-    }
-  };
-
   const reset = () => {
     setStep("choose");
     setType(null);
     setConfirmVisible(false);
-    setScanned(false);
-    setScannedData(null);
     setIsRecording(false);
     setIsListening(false);
     setRecognitionResults([]);
@@ -589,7 +502,6 @@ export default function RegisterModal() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-
       {step === "choose" && (
         <>
           <BackButton path="/" label="Volver" />
@@ -613,12 +525,11 @@ export default function RegisterModal() {
         <>
           <View style={{
             flexDirection: "row", justifyContent: "space-between",
-            alignItems: "center", gap: 10,
-            marginBottom: 10,
-            alignSelf: "stretch",
+            alignItems: "center", 
+            marginBottom: 10
           }}>
             <BackButton path="/modal/register" onPress={() => setStep("choose")} label="Volver" />
-            <Pressable onPress={() => setShowManual(!showManual)} style={{ borderWidth: 1, padding: 10, borderRadius: 10, borderColor: !isListening ? "#ebf13fff" : "#e0e0e0" }}>
+            <Pressable onPress={() => setShowManual(!showManual)} style={{ borderWidth: 1, padding: 10, borderRadius: 10, borderColor: !isListening ? "#a5e8fbff" : "#e0e0e0" }}>
               <Text style={[styles.resultText, { fontSize: 16, textAlign: "center" }]}>Manual</Text>
             </Pressable>
           </View>
@@ -666,37 +577,57 @@ export default function RegisterModal() {
 
             <View style={styles.detectedFields}>
               <Text style={styles.subtitle}>Campos detectados</Text>
+              {
+                type === "sale" && (
+                  <View style={[{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5
+                  }, styles.fieldItem]}>
+                    <Text style={styles.fieldName}>
+                      Producto
+                    </Text>
+                    <Picker
+                      selectedValue={form.nombre}
+                      onValueChange={(itemValue) => setForm({ ...form, nombre: itemValue })}
+                      style={{
+                        width: "auto", height: 40, borderWidth: 1,
+                        paddingHorizontal: 10, paddingVertical: 5,
+                        borderColor: "#2a8fa9ff", borderRadius: 10,
+                        backgroundColor: "transparent",
+                        color: "#fff", fontSize: 16, fontWeight: "600",
+                      }}
+                    >
+                      {products.map((item) => (
+                        <Picker.Item key={item.id} label={item.name} value={item.name} />
+                      ))}
+                    </Picker>
+                  </View>
+                )
+              }
               {Object.entries(voiceData).map(([key, value]) => {
-                if (type === "sale" && !["nombre", "cantidad", "precioDeVenta"].includes(key)) return null;
+                if (type === "sale" && !["cantidad", "precioDeVenta"].includes(key)) return null;
                 return (
                   <View key={key} style={styles.fieldItem}>
-                    <Text style={styles.fieldName}>{key}:</Text>
+                    <Text style={styles.fieldName}>{key}</Text>
                     <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected]}>
                       {value || "(pendiente)"}
                     </Text>
                   </View>
                 );
               })}
+              {
+                type === "sale" && (
+                  <>
+                    <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10 }}> Si no quiere registrarlo por voz, escanee el código de barras </Text>
+                    <ButtonScanner onPress={() => setStep("scan")} />
+                  </>
+                )
+              }
             </View>
 
             {type === "inventory" && (
-              <>
-                <TouchableOpacity style={styles.photoButton} onPress={() => { setStep("scan"); setScanned(false); }}>
-                  <Text style={styles.optionText}>📎 Escanear código de barras</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {scannedData && (
-              <View style={styles.overlay}>
-                <Text style={styles.resultText}>📦 Código de barras: {scannedData}</Text>
-                <TouchableOpacity
-                  style={styles.rescanButton}
-                  onPress={resetearEscaneo}
-                >
-                  <Text style={styles.rescanButtonText}>🔄 Escanear otro código</Text>
-                </TouchableOpacity>
-              </View>
+              <ButtonScanner onPress={() => { setStep("scan"); }} />
             )}
 
             <TouchableOpacity
@@ -710,51 +641,7 @@ export default function RegisterModal() {
         </>
       )}
 
-      {step === "scan" && (
-        <View style={{ flex: 1, width: "100%", alignItems: "center" }}>
-          <Text style={styles.title}>Escanea el código de barras</Text>
-
-          {scannedData && (
-            <View style={styles.scanResultContainer}>
-              <Text style={styles.scanResultText}>
-                ✅ Código escaneado: {scannedData}
-              </Text>
-              <TouchableOpacity
-                style={styles.rescanButton}
-                onPress={resetearEscaneo}
-              >
-                <Text style={styles.rescanButtonText}>🔄 Escanear otro código</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <CameraView
-            ref={cameraRef}
-            style={{ width: "100%", height: "60%" }}
-            facing="back"
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-            barcodeScannerSettings={{ barcodeTypes: ["code128", "ean13", "ean8", "qr"] }}
-          />
-
-          <View style={styles.scanControls}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => setStep("record")}
-            >
-              <Text style={styles.nextText}>Volver</Text>
-            </TouchableOpacity>
-
-            {scannedData && (
-              <TouchableOpacity
-                style={styles.continueButton}
-                onPress={() => setStep("record")}
-              >
-                <Text style={styles.nextText}>Continuar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      )}
+      {step === "scan" && <Scanner goPath={() => setStep("record")} typeSection={type as string} />}
 
       {step === "verify" && (
         <>
@@ -875,9 +762,8 @@ export default function RegisterModal() {
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#191a26", flexGrow: 1 },
+  container: { padding: 20, backgroundColor: "#191a26", flexGrow: 1, marginTop: Constants.statusBarHeight },
   centered: { alignItems: "center", justifyContent: "center", flexGrow: 1 },
   title: {
     fontSize: 22,
@@ -905,7 +791,6 @@ const styles = StyleSheet.create({
     width: 140,
   },
   chooseText: { fontSize: 16, fontWeight: "600", marginTop: 8, color: "#fff" },
-  optionText: { color: "#fff", fontSize: 16 },
   nextButton: {
     marginTop: 15,
     width: "100%",
@@ -995,22 +880,7 @@ const styles = StyleSheet.create({
     color: "#999",
     fontStyle: "italic",
   },
-  photoButton: {
-    borderColor: "#3dd1c5ff",
-    borderWidth:1,
-    padding: 15,
-    borderRadius: 10,
-    marginVertical: 5,
-    width: "100%",
-    alignItems: "center",
-  },
 
-  photo: {
-    width: 200,
-    height: 200,
-    borderRadius: 10,
-    marginVertical: 10,
-  },
   overlay: {
     backgroundColor: "#4CAF50",
     padding: 10,
@@ -1024,13 +894,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  backButton: {
-    backgroundColor: "#666",
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    marginTop: 20,
-  },
   nextText: {
     color: "#fff",
     fontSize: 18,
@@ -1046,7 +909,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   input: {
-    color:"#fff",
+    color: "#fff",
     padding: 10,
     fontSize: 16,
     marginBottom: 10,
@@ -1102,45 +965,4 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 
-  scanResultContainer: {
-    backgroundColor: "#E8F5E8",
-    padding: 15,
-    borderRadius: 10,
-    marginVertical: 10,
-    width: "100%",
-    alignItems: "center",
-  },
-  scanResultText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2E7D32",
-    textAlign: "center",
-  },
-  rescanButton: {
-    backgroundColor: "#FF9800",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  rescanButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  scanControls: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    marginVertical: 15,
-    width: "100%",
-  },
-  continueButton: {
-    backgroundColor: "#4CAF50",
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 8,
-    marginTop: 10,
-  },
 });
