@@ -68,19 +68,18 @@ export function ResultScanner({ scannedData, resetScanner }: { scannedData: any 
     );
 }
 
-function ActionButtonScanner({ goPath, scannedData }: { goPath: () => void, scannedData: any | null }) {
-    return (
-        <View style={styles.scanControls}>
-            <TouchableOpacity
-                style={styles.actionButton}
-                onPress={goPath}
-            >
-                <Text style={styles.nextText}>{scannedData ? "Continuar" : "Volver"}</Text>
-            </TouchableOpacity>
-        </View>
-    );
-}
-
+function ActionButtonScanner({ goPath, scannedData }: { 
+    goPath: (scannedCode?: string) => void, 
+    scannedData: any | null 
+}) {
+    const handleContinue = () => {
+        // Pasar el código escaneado cuando hay uno disponible
+        if (scannedData) {
+            goPath(scannedData as string);
+        } else {
+            goPath(); // Volver sin código
+        }
+    };
 const styles = StyleSheet.create({
     title: {
         fontSize: 22,

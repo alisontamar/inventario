@@ -477,17 +477,7 @@ export default function RegisterModal() {
   };
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
-  // Poner en negación más adelante
-  if (permission?.granted) {
-    return (
-      <View style={styles.centered}>
-        <Text>Se necesitan permisos para la cámara.</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.nextText}>Conceder permisos</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+
 
   const reset = () => {
     setStep("choose");
@@ -509,6 +499,17 @@ export default function RegisterModal() {
     isFieldEditing: false,
     key: ""
   });
+    // Poner en negación más adelante
+  if (!permission?.granted) {
+    return (
+      <View style={styles.centered}>
+        <Text>Se necesitan permisos para la cámara.</Text>
+        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+          <Text style={styles.nextText}>Conceder permisos</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {step === "choose" && (
