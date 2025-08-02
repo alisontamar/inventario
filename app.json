@@ -22,6 +22,10 @@
     },
     "android": {
       "icon": "assets/images/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "assets/images/icon.png",
+        "backgroundColor": "#ffffff"
+      },
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
@@ -37,7 +41,8 @@
     "plugins": [
       "expo-router",
       "expo-camera",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

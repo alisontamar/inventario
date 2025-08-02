@@ -1,9 +1,10 @@
+import { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TextInput, ScrollView, Alert,
   Pressable,
 } from "react-native";
-import { useState, useEffect } from "react";
+import { Picker } from "@react-native-picker/picker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   ExpoSpeechRecognitionModule,
@@ -12,14 +13,17 @@ import {
 import { useCameraPermissions } from "expo-camera";
 import Constants from "expo-constants";
 import * as Notifications from 'expo-notifications';
-import { supabase } from "@/constants/supabase";
-import Manual from "@/app/modal/manual";
+import Entypo from '@expo/vector-icons/Entypo';
 import Scanner, { ButtonScanner, ResultScanner } from "@/app/components/Scanner";
 import BackButton from "@/app/components/BackButton";
+import PermissionCamera from "@/app/components/permissions/PermissionCamera";
+import FormSale from "@/app/components/FormSale";
+import Choose from "@/app/components/Choose";
+import FormInventory from "@/app/components/FormInventory";
+import { supabase } from "@/constants/supabase";
 import { formatDateForDB } from "@/app/utils/formatDate";
-import { useScanner } from "../hooks/useScanner";
-import { Picker } from "@react-native-picker/picker";
-import Entypo from '@expo/vector-icons/Entypo';
+import { useScanner } from "@/app/hooks/useScanner";
+import Manual from "@/app/modal/manual";
 
 export default function RegisterModal() {
   const [step, setStep] = useState<"choose" | "record" | "verify" | "scan">("choose");
@@ -94,20 +98,7 @@ export default function RegisterModal() {
     };
   }, []);
 
-  // FIX 1: Mejorar el manejo del scanner data - persistir entre steps
-  useEffect(() => {
-    if (scannedData) {
-      console.log("Scanner data received:", scannedData);
-      setForm(prev => ({ ...prev, barcode: scannedData }));
-
-      // Si es venta y hay scannedData, buscar el producto automáticamente
-      if (type === "sale" && scannedData) {
-        searchProductByScan(scannedData);
-      }
-    }
-  }, [scannedData, type]);
-
-  // FIX: Función para buscar producto por código de barras en ventas
+  // Función para buscar el producto por código de barras (escaneado)
   const searchProductByScan = async (barcode: string) => {
     try {
       const { data: producto, error } = await supabase
@@ -155,6 +146,48 @@ export default function RegisterModal() {
       Alert.alert("Error", "Error inesperado al buscar el producto");
     }
   };
+
+  useEffect(() => {
+    const loadScannedData = async () => {
+      try {
+        // Leer los datos almacenados en SecureStore
+        const storedScannedData = await SecureStore.getItemAsync('scannedData');
+
+        if (storedScannedData) {
+          console.log("Datos escaneados leídos desde SecureStore:", storedScannedData);
+          // Si hay datos guardados, actualizamos el estado
+          setForm(prev => ({ ...prev, barcode: storedScannedData }));
+        } else {
+          console.log('No hay datos escaneados guardados en SecureStore');
+        }
+      } catch (error) {
+        console.log('Error al leer los datos de SecureStore:', error);
+      }
+    };
+
+    if (scannedData) {
+      console.log("Scanner data received:", scannedData);
+      // Guardamos el nuevo scannedData en SecureStore
+      SecureStore.setItemAsync('scannedData', scannedData)
+        .then(() => {
+          console.log('Datos escaneados guardados en SecureStore');
+        })
+        .catch((error) => {
+          console.log('Error al guardar en SecureStore:', error);
+        });
+
+      // Actualizamos el estado local con los datos escaneados
+      setForm(prev => ({ ...prev, barcode: scannedData }));
+
+      // Si es venta y hay scannedData, buscar el producto automáticamente
+      if (type === "sale" && scannedData) {
+        searchProductByScan(scannedData);  // Llamada a la función para buscar el producto
+      }
+    } else {
+      // Si no hay scannedData, intentamos leer desde SecureStore
+      loadScannedData();
+    }
+  }, [scannedData, type]);
 
   // Funciones para guardar en la base de datos
   const guardarProducto = async () => {
@@ -351,14 +384,12 @@ export default function RegisterModal() {
     console.log("Speech recognition result:", event);
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
-      console.log("Transcript:", transcript);
       setRecognitionResults(prev => [...prev, transcript]);
       processVoiceInput(transcript);
     }
   });
 
   useSpeechRecognitionEvent("error", (event) => {
-    console.error("Speech recognition error:", event);
     setIsListening(false);
     setIsRecording(false);
 
@@ -372,7 +403,6 @@ export default function RegisterModal() {
 
   const startRecording = async () => {
     try {
-      console.log("Starting speech recognition...");
       setRecognitionResults([]);
 
       const options = {
@@ -401,7 +431,6 @@ export default function RegisterModal() {
 
   const stopRecording = async () => {
     try {
-      console.log("Stopping speech recognition...");
       await ExpoSpeechRecognitionModule.stop();
       setIsRecording(false);
       setIsListening(false);
@@ -413,8 +442,6 @@ export default function RegisterModal() {
   };
 
   const toggleRecording = async () => {
-    console.log("Toggle recording called", { isRecording, isListening });
-
     if (isRecording || isListening) {
       await stopRecording();
     } else {
@@ -513,7 +540,6 @@ export default function RegisterModal() {
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
 
-  // FIX 3: Mejorar el estado de edición para móviles
   const [isEditing, setIsEditing] = useState({
     isFieldEditing: false,
     key: ""
@@ -535,41 +561,11 @@ export default function RegisterModal() {
     setVoiceData(prev => ({ ...prev, [field]: value }));
   };
 
-  // FIX 2: Manejar permisos sin return temprano
-  if (!permission?.granted) {
-    return (
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.centered}>
-          <Text>Se necesitan permisos para la cámara.</Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.nextText}>Conceder permisos</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    );
-  }
+  if (!permission?.granted) return <PermissionCamera requestPermission={requestPermission} />;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {step === "choose" && (
-        <>
-          <BackButton path="/" label="Volver" />
-          <View style={styles.centered}>
-            <Text style={styles.title}>¿Qué deseas registrar?</Text>
-            <View style={styles.chooseBox}>
-              <TouchableOpacity style={styles.chooseCard} onPress={() => { setType("inventory"); setStep("record"); }}>
-                <MaterialCommunityIcons name="package-variant" size={40} color="#1976D2" />
-                <Text style={styles.chooseText}>Inventario</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.chooseCard} onPress={() => { setType("sale"); setStep("record"); }}>
-                <MaterialCommunityIcons name="receipt" size={40} color="#1976D2" />
-                <Text style={styles.chooseText}>Venta</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </>
-      )}
-
+      {step === "choose" && <Choose setType={setType} setStep={setStep} />}
       {step === "record" && (
         <>
           <View style={{
@@ -626,44 +622,7 @@ export default function RegisterModal() {
 
             <View style={styles.detectedFields}>
               <Text style={styles.subtitle}>Campos detectados</Text>
-
-              {/* FIX: Mostrar resultado del scanner siempre, independiente del step */}
-              {scannedData && (
-                <View style={{
-                  backgroundColor: "#1a1a1a",
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: "#4CAF50",
-                  marginBottom: 15
-                }}>
-                  <Text style={{ color: "#4CAF50", fontSize: 14, fontWeight: "600" }}>
-                    Código escaneado:
-                  </Text>
-                  <Text style={{ color: "#fff", fontSize: 16, marginTop: 5 }}>
-                    {scannedData}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      // Reset scanner data
-                      setForm(prev => ({ ...prev, barcode: "" }));
-                    }}
-                    style={{
-                      marginTop: 8,
-                      paddingVertical: 6,
-                      paddingHorizontal: 12,
-                      backgroundColor: "#FF9800",
-                      borderRadius: 6,
-                      alignSelf: "flex-start"
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
-                      🔄 Escanear otro
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
+              {scannedData && <ResultScanner scannedData={scannedData} />}
               {
                 type === "sale" && (
                   <View style={[{
@@ -680,7 +639,6 @@ export default function RegisterModal() {
                       Producto
                     </Text>
 
-                    {/* FIX: Mostrar producto seleccionado */}
                     {form.nombre ? (
                       <View style={{
                         flexDirection: "row",
@@ -718,7 +676,7 @@ export default function RegisterModal() {
                           color: "#fff",
                           borderWidth: 1,
                           borderColor: "#2a8fa9ff",
-                          padding:10,
+                          padding: 10,
                           borderRadius: 8
                         }}
                         itemStyle={{ color: "#fff" }}
@@ -733,7 +691,6 @@ export default function RegisterModal() {
                 )
               }
 
-              {/* FIX 4: Mostrar todas las keys del formulario según el tipo */}
               {Object.entries(form).map(([key, value]) => {
                 // Para sales, solo mostrar campos relevantes
                 if (type === "sale" && !["nombre", "cantidad", "precioDeVenta"].includes(key)) return null;
@@ -866,84 +823,8 @@ export default function RegisterModal() {
           <View style={styles.centered}>
             <Text style={styles.title}>Verifica y edita los datos</Text>
             <View style={styles.detectedFields}>
-              {type === "sale" ? (
-                <>
-                  <TextInput
-                    style={styles.input}
-                    value={form.nombre}
-                    onChangeText={(t) => updateField("nombre", t)}
-                    placeholder="Nombre del producto"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.cantidad}
-                    onChangeText={(t) => updateField("cantidad", t)}
-                    placeholder="Cantidad vendida"
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.precioDeVenta}
-                    onChangeText={(t) => updateField("precioDeVenta", t)}
-                    placeholder="Precio de venta"
-                    keyboardType="numeric"
-                  />
-                </>
-              ) : (
-                <>
-                  <TextInput
-                    style={styles.input}
-                    value={form.nombre}
-                    onChangeText={(t) => updateField("nombre", t)}
-                    placeholder="Nombre del producto"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.empresa}
-                    onChangeText={(t) => updateField("empresa", t)}
-                    placeholder="Empresa"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.grupo}
-                    onChangeText={(t) => updateField("grupo", t)}
-                    placeholder="grupo"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.precioDeVenta}
-                    onChangeText={(t) => updateField("precioDeVenta", t)}
-                    placeholder="Precio de venta"
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.precioDeCompra}
-                    onChangeText={(t) => updateField("precioDeCompra", t)}
-                    placeholder="Precio de compra"
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.cantidad}
-                    onChangeText={(t) => updateField("cantidad", t)}
-                    placeholder="Cantidad"
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.fechaVencimiento}
-                    onChangeText={(t) => updateField("fechaVencimiento", t)}
-                    placeholder="Fecha de vencimiento (DD/MM/YYYY)"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={form.barcode}
-                    onChangeText={(t) => updateField("barcode", t)}
-                    placeholder="Código de barras"
-                  />
-                </>
-              )}
+              {type === "sale" ? <FormSale form={form} updateField={updateField} />
+                : <FormInventory form={form} updateField={updateField} />}
             </View>
             <TouchableOpacity
               style={[styles.saveButton, isLoading && styles.disabledButton]}
@@ -1117,7 +998,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
-
   },
   card: {
     backgroundColor: "white",
