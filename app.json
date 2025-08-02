@@ -46,12 +46,12 @@
     "experiments": {
       "typedRoutes": true
     },
+    "owner": "alisontamar",
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "65f3fa59-511d-4eb2-bf2c-9b249d6d4363"
+        "projectId": "c3a4dc50-7ed4-460d-bb63-c78e522d5565"
       }
-    },
-    "owner": "rodrigo_pa"
+    }
   }
 }
