@@ -3,6 +3,7 @@ import { useScanner } from "@/app/hooks/useScanner";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 import { BarcodeScanningResult, CameraView } from "expo-camera";
 import { useEffect, useRef } from "react";
+import * as SecureStore from 'expo-secure-store';
 
 export default function Scanner({ goPath, typeSection = "inventory" }: { goPath: () => void, typeSection?: string }) {
     const { scannedData, isScanning, searchingProductTypeSale, handleBarCodeScanned,
@@ -52,7 +53,18 @@ function StartScanner({ isScanning, handleBarCodeScanned }: { isScanning: boolea
     );
 }
 
-export function ResultScanner({ scannedData, resetScanner }: { scannedData: any | null, resetScanner: () => void }) {
+export function ResultScanner({ scannedData, resetScanner }: { scannedData: any | null, resetScanner?: () => void }) {
+    useEffect(() => {
+        if (scannedData) {
+            SecureStore.setItemAsync('scannedData', scannedData)
+                .then(() => {
+                    console.log('Datos guardados en SecureStore');
+                })
+                .catch((error) => {
+                    console.log('Error al guardar en SecureStore:', error);
+                });
+        }
+    }, [scannedData]);
     return (
         <View style={styles.scanResultContainer}>
             <Text style={styles.scanResultText}>
