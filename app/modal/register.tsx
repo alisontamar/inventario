@@ -69,10 +69,7 @@ export default function RegisterModal() {
       try {
         await requestPermission();
         await getNamesProducts();
-        // Verificar si el reconocimiento de voz está disponible
         const available = await ExpoSpeechRecognitionModule.getStateAsync();
-
-        // Solicitar permisos de audio
         const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
 
         if (status !== 'granted') {
@@ -97,11 +94,67 @@ export default function RegisterModal() {
     };
   }, []);
 
+  // FIX 1: Mejorar el manejo del scanner data - persistir entre steps
   useEffect(() => {
-    if (scannedData && step === "record") {
+    if (scannedData) {
+      console.log("Scanner data received:", scannedData);
       setForm(prev => ({ ...prev, barcode: scannedData }));
+
+      // Si es venta y hay scannedData, buscar el producto automáticamente
+      if (type === "sale" && scannedData) {
+        searchProductByScan(scannedData);
+      }
     }
-  }, [scannedData, step]);
+  }, [scannedData, type]);
+
+  // FIX: Función para buscar producto por código de barras en ventas
+  const searchProductByScan = async (barcode: string) => {
+    try {
+      const { data: producto, error } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('barcode', barcode)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          Alert.alert(
+            "Producto no encontrado",
+            `No se encontró un producto con el código ${barcode}`
+          );
+        } else {
+          console.error('Error buscando producto:', error);
+          Alert.alert("Error", "Error al buscar el producto");
+        }
+        return;
+      }
+
+      if (producto) {
+        // Llenar automáticamente los campos del formulario
+        setForm(prev => ({
+          ...prev,
+          nombre: producto.nombre,
+          precioDeVenta: producto.precio_venta?.toString() || "",
+          barcode: barcode
+        }));
+
+        setVoiceData(prev => ({
+          ...prev,
+          nombre: producto.nombre,
+          precioDeVenta: producto.precio_venta?.toString() || ""
+        }));
+
+        Alert.alert(
+          "¡Producto encontrado!",
+          `${producto.nombre}\nPrecio: ${producto.precio_venta}\nStock disponible: ${producto.cantidad}`,
+          [{ text: "OK", style: "default" }]
+        );
+      }
+    } catch (error) {
+      console.error('Error en búsqueda:', error);
+      Alert.alert("Error", "Error inesperado al buscar el producto");
+    }
+  };
 
   // Funciones para guardar en la base de datos
   const guardarProducto = async () => {
@@ -113,7 +166,6 @@ export default function RegisterModal() {
         return;
       }
 
-      // Validar fecha de vencimiento si se proporcionó
       let fechaVencimientoFormatted = null;
       if (form.fechaVencimiento) {
         fechaVencimientoFormatted = formatDateForDB(form.fechaVencimiento);
@@ -123,31 +175,26 @@ export default function RegisterModal() {
         }
       }
 
-      // Verificar si ya existe un producto similar (por barcode o nombre + empresa)
-      // Solo buscar si hay barcode
       let existingProduct = null;
       if (form.barcode) {
         const { data, error: searchError } = await supabase
           .from('productos')
           .select('*')
           .eq('barcode', form.barcode)
-          .single(); // Usar .single() para obtener un objeto, no un array
+          .single();
 
         if (searchError) {
-          // Si el error es PGRST116, significa que no se encontró el producto
           if (searchError.code !== 'PGRST116') {
             console.error('Error buscando producto existente:', searchError);
             Alert.alert("Error", "Error al verificar producto existente");
             return;
           }
-          // Si es PGRST116, continuamos con existingProduct = null
         } else {
           existingProduct = data;
         }
       }
 
       if (existingProduct) {
-        // El producto existe, actualizar
         const nuevaCantidad = (existingProduct.cantidad || 0) + (form.cantidad ? parseInt(form.cantidad) : 0);
 
         const updateData = {
@@ -163,6 +210,7 @@ export default function RegisterModal() {
           .eq('id', existingProduct.id);
 
         if (updateError) {
+          console.error('Error actualizando producto:', updateError);
           Alert.alert("Error", "No se pudo actualizar el producto");
         } else {
           Alert.alert(
@@ -172,7 +220,6 @@ export default function RegisterModal() {
           reset();
         }
       } else {
-        // El producto no existe, crear uno nuevo
         const {
           nombre, empresa, grupo, precioDeVenta, precioDeCompra, cantidad, barcode, fechaVencimiento
         } = form;
@@ -231,13 +278,12 @@ export default function RegisterModal() {
       const cantidadVenta = parseInt(form.cantidad);
       const nuevoStock = productos.cantidad - cantidadVenta;
 
-      if (nuevoStock < 0) {
+      if (nuevoStock <= 0) {
         Alert.alert("Stock insuficiente", `Solo hay ${productos.cantidad} unidades disponibles`);
         return;
       }
 
-      // Notificación si el stock baja de 3
-      if (nuevoStock < 3) {
+      if (nuevoStock <= 3) {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "📦 ¡Stock bajo!",
@@ -249,7 +295,6 @@ export default function RegisterModal() {
         });
       }
 
-      // Registrar la venta
       const { error } = await supabase
         .from('ventas')
         .insert([{
@@ -276,16 +321,21 @@ export default function RegisterModal() {
   };
 
   const confirmarGuardado = async () => {
+    console.log("Confirmando guardado...", { type, form });
     setConfirmVisible(false);
 
     if (type === "inventory") {
+      console.log("Ejecutando guardarProducto...");
       await guardarProducto();
     } else if (type === "sale") {
+      console.log("Ejecutando guardarVenta...");
       await guardarVenta();
+    } else {
+      console.error("Tipo no válido:", type);
+      Alert.alert("Error", "Tipo de operación no válido");
     }
   };
 
-  // Escuchar eventos de reconocimiento de voz
   useSpeechRecognitionEvent("start", () => {
     console.log("Speech recognition started");
     setIsListening(true);
@@ -323,11 +373,8 @@ export default function RegisterModal() {
   const startRecording = async () => {
     try {
       console.log("Starting speech recognition...");
-
-      // Limpiar resultados anteriores
       setRecognitionResults([]);
 
-      // Configurar opciones de reconocimiento
       const options = {
         lang: "es-ES",
         interimResults: true,
@@ -380,7 +427,6 @@ export default function RegisterModal() {
     const nd = { ...voiceData };
 
     if (type === "inventory") {
-      // Procesar campos individuales
       if (lower.includes("nombre")) {
         const nombreMatch = text.match(/nombre\s+(.+?)(?:\s+empresa|$)/i);
         if (nombreMatch) nd.nombre = nombreMatch[1].trim();
@@ -406,9 +452,6 @@ export default function RegisterModal() {
         if (cantidadMatch) nd.cantidad = cantidadMatch[1];
       }
       if (lower.includes("fecha de vencimiento") || lower.includes("vencimiento")) {
-        // Buscar fechas en formato DD/MM/YYYY o DD-MM-YYYY
-        // Regex más flexible para fechas dictadas por voz
-        // Mapeo de meses en español
         const mesesMap: { [key: string]: string } = {
           'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04',
           'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08',
@@ -416,8 +459,6 @@ export default function RegisterModal() {
         };
 
         if (lower.includes("fecha de vencimiento") || lower.includes("vencimiento")) {
-
-          // Opción 1: Formato DD/MM/YYYY o DD-MM-YYYY
           const fechaNumericaMatch = text.match(/(?:fecha\s+de\s+vencimiento|vencimiento)\s+(\d{1,2})\s*[\/\-\s]+(\d{1,2})\s*[\/\-\s]+(\d{4})/i);
 
           if (fechaNumericaMatch) {
@@ -426,29 +467,24 @@ export default function RegisterModal() {
             const año = fechaNumericaMatch[3];
             nd.fechaVencimiento = `${dia}/${mes}/${año}`;
           } else {
-            // Opción 2: Formato natural "9 de julio de 2027"
             const fechaNaturalMatch = text.match(/(?:fecha\s+de\s+vencimiento|vencimiento)\s+(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/i);
 
             if (fechaNaturalMatch) {
               const dia = fechaNaturalMatch[1].padStart(2, '0');
               const mesNombre = fechaNaturalMatch[2].toLowerCase();
               const año = fechaNaturalMatch[3];
-
-              // Convertir nombre del mes a número
               const mesNumero = mesesMap[mesNombre];
 
               if (mesNumero) {
                 nd.fechaVencimiento = `${dia}/${mesNumero}/${año}`;
               }
             } else {
-              // Opción 3: Formato "9 julio 2027" (sin "de")
               const fechaSimpleMatch = text.match(/(?:fecha\s+de\s+vencimiento|vencimiento)\s+(\d{1,2})\s+(\w+)\s+(\d{4})/i);
 
               if (fechaSimpleMatch) {
                 const dia = fechaSimpleMatch[1].padStart(2, '0');
                 const mesNombre = fechaSimpleMatch[2].toLowerCase();
                 const año = fechaSimpleMatch[3];
-
                 const mesNumero = mesesMap[mesNombre];
 
                 if (mesNumero) {
@@ -477,17 +513,29 @@ export default function RegisterModal() {
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
 
+  // FIX 3: Mejorar el estado de edición para móviles
   const [isEditing, setIsEditing] = useState({
     isFieldEditing: false,
     key: ""
   });
+
+  const reset = () => {
+    setStep("choose");
+    setType(null);
+    setConfirmVisible(false);
+    setIsRecording(false);
+    setIsListening(false);
+    setRecognitionResults([]);
+    setVoiceData({ nombre: "", empresa: "", grupo: "", precioDeVenta: "", precioDeCompra: "", cantidad: "", fechaVencimiento: "" });
+    setForm({ nombre: "", empresa: "", grupo: "", precioDeVenta: "", precioDeCompra: "", cantidad: "", barcode: "", fechaVencimiento: "" });
+  };
 
   const updateField = (field: keyof typeof form, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
     setVoiceData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Poner en negación más adelante
+  // FIX 2: Manejar permisos sin return temprano
   if (!permission?.granted) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
@@ -500,17 +548,6 @@ export default function RegisterModal() {
       </ScrollView>
     );
   }
-
-  const reset = () => {
-    setStep("choose");
-    setType(null);
-    setConfirmVisible(false);
-    setIsRecording(false);
-    setIsListening(false);
-    setRecognitionResults([]);
-    setVoiceData({ nombre: "", empresa: "", grupo: "", precioDeVenta: "", precioDeCompra: "", cantidad: "", fechaVencimiento: "" });
-    setForm({ nombre: "", empresa: "", grupo: "", precioDeVenta: "", precioDeCompra: "", cantidad: "", barcode: "", fechaVencimiento: "" });
-  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -555,7 +592,7 @@ export default function RegisterModal() {
               size={100}
               color={isListening ? "#FF3D00" : "#1976D2"}
             />
-            {/*Botones de inicio y pausa de la grabación*/}
+
             <View style={styles.recordingControls}>
               <TouchableOpacity
                 onPress={toggleRecording}
@@ -587,55 +624,139 @@ export default function RegisterModal() {
               </View>
             )}
 
-            {/*Formulario para ventas y inventario*/}
             <View style={styles.detectedFields}>
               <Text style={styles.subtitle}>Campos detectados</Text>
+
+              {/* FIX: Mostrar resultado del scanner siempre, independiente del step */}
+              {scannedData && (
+                <View style={{
+                  backgroundColor: "#1a1a1a",
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#4CAF50",
+                  marginBottom: 15
+                }}>
+                  <Text style={{ color: "#4CAF50", fontSize: 14, fontWeight: "600" }}>
+                    Código escaneado:
+                  </Text>
+                  <Text style={{ color: "#fff", fontSize: 16, marginTop: 5 }}>
+                    {scannedData}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Reset scanner data
+                      setForm(prev => ({ ...prev, barcode: "" }));
+                    }}
+                    style={{
+                      marginTop: 8,
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
+                      backgroundColor: "#FF9800",
+                      borderRadius: 6,
+                      alignSelf: "flex-start"
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+                      🔄 Escanear otro
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {
                 type === "sale" && (
                   <View style={[{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 5
+                    flexDirection: "column",
+                    marginVertical: 10,
+                    paddingHorizontal: 10
                   }, styles.fieldItem]}>
-                    <Text style={styles.fieldName}>
+                    <Text style={[styles.fieldName, {
+                      fontSize: 16,
+                      fontWeight: "600",
+                      marginBottom: 10,
+                      textTransform: "capitalize"
+                    }]}>
                       Producto
                     </Text>
-                    <Picker
-                      selectedValue={form.nombre}
-                      onValueChange={(itemValue) => setForm({ ...form, nombre: itemValue })}
-                      style={{
-                        width: "auto", height: 40, borderWidth: 1,
-                        paddingHorizontal: 10, paddingVertical: 5,
-                        borderColor: "#2a8fa9ff", borderRadius: 10,
-                        backgroundColor: "transparent",
-                        color: "#fff", fontSize: 16, fontWeight: "600",
-                      }}
-                    >
-                      <Picker.Item label="Selecciona tu producto" value="" enabled={false} />
-                      {products.length > 0 && products.map((item) => (
-                        <Picker.Item key={item.id} label={item.name} value={item.name} />
-                      ))}
-                    </Picker>
+
+                    {/* FIX: Mostrar producto seleccionado */}
+                    {form.nombre ? (
+                      <View style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        backgroundColor: "#1a1a1a",
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "#2a8fa9ff"
+                      }}>
+                        <Text style={{ color: "#fff", fontSize: 16, flex: 1 }}>
+                          {form.nombre}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setForm({ ...form, nombre: "", precioDeVenta: "" });
+                            setVoiceData({ ...voiceData, nombre: "", precioDeVenta: "" });
+                          }}
+                          style={{ padding: 5 }}
+                        >
+                          <Text style={{ color: "#1976D2", fontSize: 14 }}>Cambiar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Picker
+                        selectedValue={form.nombre}
+                        onValueChange={(itemValue) => {
+                          console.log("Producto seleccionado:", itemValue);
+                          setForm({ ...form, nombre: itemValue });
+                          setVoiceData({ ...voiceData, nombre: itemValue });
+                        }}
+                        style={{
+                          backgroundColor: "#1a1a1a",
+                          color: "#fff",
+                          borderWidth: 1,
+                          borderColor: "#2a8fa9ff",
+                          padding:10,
+                          borderRadius: 8
+                        }}
+                        itemStyle={{ color: "#fff" }}
+                      >
+                        <Picker.Item label="Selecciona tu producto" value="" enabled={false} />
+                        {products.length > 0 && products.map((item) => (
+                          <Picker.Item key={item.id} label={item.name} value={item.name} />
+                        ))}
+                      </Picker>
+                    )}
                   </View>
                 )
               }
+
+              {/* FIX 4: Mostrar todas las keys del formulario según el tipo */}
               {Object.entries(form).map(([key, value]) => {
-                if (type === "sale" && !["cantidad", "precioDeVenta"].includes(key)) return null;
-                if (type === "inventory" && key === "nombre") return null;
+                // Para sales, solo mostrar campos relevantes
+                if (type === "sale" && !["nombre", "cantidad", "precioDeVenta"].includes(key)) return null;
+                // No mostrar barcode en la lista, se maneja por separado
+                if (key === "barcode") return null;
+
                 return (
                   <View key={key} style={[styles.fieldItem, {
                     borderBottomWidth: 1,
                     borderBottomColor: "#333",
                     paddingVertical: 15,
-                    marginBottom: 0
+                    marginBottom: 0,
+                    paddingHorizontal: 10
                   }]}>
                     <View style={{
                       flexDirection: "row",
-                      alignItems: "center",
+                      alignItems: "flex-start",
                       justifyContent: "space-between",
-                      width: "100%"
+                      width: "100%",
+                      maxWidth: "100%"
                     }}>
-                      <View style={{ flex: 1 }}>
+                      {/* Columna izquierda: Label y valor */}
+                      <View style={{ flex: 1, marginRight: 10, maxWidth: "80%" }}>
                         <Text style={[styles.fieldName, {
                           fontSize: 16,
                           fontWeight: "600",
@@ -656,7 +777,8 @@ export default function RegisterModal() {
                               fontSize: 16,
                               backgroundColor: "#1a1a1a",
                               color: "#fff",
-                              marginTop: 5
+                              marginTop: 5,
+                              width: "100%"
                             }]}
                             value={value}
                             keyboardType={
@@ -676,57 +798,54 @@ export default function RegisterModal() {
                           </Text>
                         )}
                       </View>
-                    </View>
 
-                    {key !== "fechaVencimiento" && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          if (isEditing.isFieldEditing && isEditing.key === key) {
-                            setIsEditing({ isFieldEditing: false, key: "" });
-                          } else {
-                            setIsEditing({ isFieldEditing: true, key });
-                          }
-                        }}
-                        style={{
-                          padding: 12,
-                          borderRadius: 8,
-                          borderColor: "#1976D2",
-                          borderWidth: 1,
-                          backgroundColor: isEditing.isFieldEditing && isEditing.key === key ? "#1976D2" : "transparent",
-                          width: 48,
-                          height: 48,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginLeft: 15
-                        }}
-                      >
-                        <Entypo
-                          name="pencil"
-                          size={18}
-                          color={isEditing.isFieldEditing && isEditing.key === key ? "#fff" : "#1976D2"}
-                        />
-                      </TouchableOpacity>
-                    )}
+                      {/* Columna derecha: Botón de edición - FIX: Mantener dentro de pantalla */}
+                      {key !== "fechaVencimiento" && (
+                        <View style={{ width: 48 }}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              if (isEditing.isFieldEditing && isEditing.key === key) {
+                                setIsEditing({ isFieldEditing: false, key: "" });
+                              } else {
+                                setIsEditing({ isFieldEditing: true, key });
+                              }
+                            }}
+                            style={{
+                              padding: 10,
+                              borderRadius: 8,
+                              borderColor: "#1976D2",
+                              borderWidth: 1,
+                              backgroundColor: isEditing.isFieldEditing && isEditing.key === key ? "#1976D2" : "transparent",
+                              width: 44,
+                              height: 44,
+                              alignItems: "center",
+                              justifyContent: "center"
+                            }}
+                          >
+                            <Entypo
+                              name="pencil"
+                              size={16}
+                              color={isEditing.isFieldEditing && isEditing.key === key ? "#fff" : "#1976D2"}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 );
               })}
+
               {
-                type === "sale" && (
+                (type === "sale" || type === "inventory") && (
                   <>
-                    <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10 }}> Ó escanee el código de barras </Text>
-                    <ResultScanner scannedData={scannedData} resetScanner={() => setStep("record")} />
+                    <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10, textAlign: "center" }}>
+                      {!scannedData ? "Escanea el código de barras" : "¿Escanear otro código?"}
+                    </Text>
                     <ButtonScanner onPress={() => setStep("scan")} />
                   </>
                 )
               }
             </View>
-
-            {type === "inventory" && (
-              <>
-                <ResultScanner scannedData={scannedData} resetScanner={() => setStep("record")} />
-                <ButtonScanner onPress={() => { setStep("scan"); }} />
-              </>
-            )}
 
             <TouchableOpacity
               style={styles.nextButton}
