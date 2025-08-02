@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TextInput, ScrollView, Alert,
-  Pressable,
+  Pressable, Platform, KeyboardAvoidingView,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -667,7 +667,6 @@ export default function RegisterModal() {
                       <Picker
                         selectedValue={form.nombre}
                         onValueChange={(itemValue) => {
-                          console.log("Producto seleccionado:", itemValue);
                           setForm({ ...form, nombre: itemValue });
                           setVoiceData({ ...voiceData, nombre: itemValue });
                         }}
@@ -680,6 +679,7 @@ export default function RegisterModal() {
                           borderRadius: 8
                         }}
                         itemStyle={{ color: "#fff" }}
+                        dropdownIconColor="#fff"
                       >
                         <Picker.Item label="Selecciona tu producto" value="" enabled={false} />
                         {products.length > 0 && products.map((item) => (
@@ -698,97 +698,107 @@ export default function RegisterModal() {
                 if (key === "barcode") return null;
 
                 return (
-                  <View key={key} style={[styles.fieldItem, {
-                    borderBottomWidth: 1,
-                    borderBottomColor: "#333",
-                    paddingVertical: 15,
-                    marginBottom: 0,
-                    paddingHorizontal: 10
-                  }]}>
-                    <View style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      width: "100%",
-                      maxWidth: "100%"
-                    }}>
-                      {/* Columna izquierda: Label y valor */}
-                      <View style={{ flex: 1, marginRight: 10, maxWidth: "80%" }}>
-                        <Text style={[styles.fieldName, {
-                          fontSize: 16,
-                          fontWeight: "600",
-                          marginBottom: 5,
-                          textTransform: "capitalize"
-                        }]}>
-                          {key}
-                        </Text>
-
-                        {isEditing.isFieldEditing && key === isEditing.key ? (
-                          <TextInput
-                            style={[styles.input, {
-                              borderRadius: 8,
-                              borderColor: "#b8d9f9ff",
-                              borderWidth: 1,
-                              paddingHorizontal: 12,
-                              paddingVertical: 10,
+                  <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  >
+                    <ScrollView contentContainerStyle={{ padding: 20 }}>
+                      <View
+                        key={key}
+                        style={[styles.fieldItem, {
+                          borderBottomWidth: 1,
+                          borderBottomColor: "#333",
+                          paddingVertical: 15,
+                          marginBottom: 0,
+                          paddingHorizontal: 10
+                        }]}
+                      >
+                        <View style={{
+                          flexDirection: "row",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          maxWidth: "100%"
+                        }}>
+                          {/* Columna izquierda: Label y valor */}
+                          <View style={{ flex: 1, marginRight: 10, maxWidth: "80%" }}>
+                            <Text style={[styles.fieldName, {
                               fontSize: 16,
-                              backgroundColor: "#1a1a1a",
-                              color: "#fff",
-                              marginTop: 5,
-                              width: "100%"
-                            }]}
-                            value={value}
-                            keyboardType={
-                              key === "cantidad" || key === "precioDeVenta" || key === "precioDeCompra"
-                                ? "numeric" : "default"
-                            }
-                            onChangeText={(t) => updateField(key as keyof typeof form, t)}
-                            autoFocus={true}
-                            onBlur={() => setIsEditing({ isFieldEditing: false, key: "" })}
-                          />
-                        ) : (
-                          <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected, {
-                            fontSize: 14,
-                            color: value ? "#fff" : "#888"
-                          }]}>
-                            {value || "(pendiente)"}
-                          </Text>
-                        )}
-                      </View>
+                              fontWeight: "600",
+                              marginBottom: 5,
+                              textTransform: "capitalize"
+                            }]}>
+                              {key}
+                            </Text>
 
-                      {/* Columna derecha: Botón de edición - FIX: Mantener dentro de pantalla */}
-                      {key !== "fechaVencimiento" && (
-                        <View style={{ width: 48 }}>
-                          <TouchableOpacity
-                            onPress={() => {
-                              if (isEditing.isFieldEditing && isEditing.key === key) {
-                                setIsEditing({ isFieldEditing: false, key: "" });
-                              } else {
-                                setIsEditing({ isFieldEditing: true, key });
-                              }
-                            }}
-                            style={{
-                              padding: 10,
-                              borderRadius: 8,
-                              borderColor: "#1976D2",
-                              borderWidth: 1,
-                              backgroundColor: isEditing.isFieldEditing && isEditing.key === key ? "#1976D2" : "transparent",
-                              width: 44,
-                              height: 44,
-                              alignItems: "center",
-                              justifyContent: "center"
-                            }}
-                          >
-                            <Entypo
-                              name="pencil"
-                              size={16}
-                              color={isEditing.isFieldEditing && isEditing.key === key ? "#fff" : "#1976D2"}
-                            />
-                          </TouchableOpacity>
+                            {isEditing.isFieldEditing && key === isEditing.key ? (
+                              <TextInput
+                                style={[styles.input, {
+                                  borderRadius: 8,
+                                  borderColor: "#b8d9f9ff",
+                                  borderWidth: 1,
+                                  paddingHorizontal: 12,
+                                  paddingVertical: 10,
+                                  fontSize: 16,
+                                  backgroundColor: "#1a1a1a",
+                                  color: "#fff",
+                                  marginTop: 5,
+                                  width: "100%"
+                                }]}
+                                value={value}
+                                keyboardType={
+                                  key === "cantidad" || key === "precioDeVenta" || key === "precioDeCompra"
+                                    ? "numeric" : "default"
+                                }
+                                onChangeText={(t) => updateField(key, t)}
+                                autoFocus={true}
+                                onBlur={() => setIsEditing({ isFieldEditing: false, key: "" })}
+                              />
+                            ) : (
+                              <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected, {
+                                fontSize: 14,
+                                color: value ? "#fff" : "#888"
+                              }]}>
+                                {value || "(pendiente)"}
+                              </Text>
+                            )}
+                          </View>
+
+                          {/* Columna derecha: Botón de edición */}
+                          {key !== "fechaVencimiento" && (
+                            <View style={{ width: 48 }}>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  if (isEditing.isFieldEditing && isEditing.key === key) {
+                                    setIsEditing({ isFieldEditing: false, key: "" });
+                                  } else {
+                                    setIsEditing({ isFieldEditing: true, key });
+                                  }
+                                }}
+                                style={{
+                                  padding: 10,
+                                  borderRadius: 8,
+                                  borderColor: "#1976D2",
+                                  borderWidth: 1,
+                                  backgroundColor: isEditing.isFieldEditing && isEditing.key === key ? "#1976D2" : "transparent",
+                                  width: 44,
+                                  height: 44,
+                                  alignItems: "center",
+                                  justifyContent: "center"
+                                }}
+                              >
+                                <Entypo
+                                  name="pencil"
+                                  size={16}
+                                  color={isEditing.isFieldEditing && isEditing.key === key ? "#fff" : "#1976D2"}
+                                />
+                              </TouchableOpacity>
+                            </View>
+                          )}
                         </View>
-                      )}
-                    </View>
-                  </View>
+                      </View>
+                    </ScrollView>
+                  </KeyboardAvoidingView>
                 );
               })}
 
