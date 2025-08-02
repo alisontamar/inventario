@@ -11,9 +11,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-        <meta name="icon" content="/assets/images/logo.png" />
+        <meta name="icon" content="/assets/images/icon.png" />
         <title>I&S</title>
-        <meta name='og:image' content='/assets/images/logo.png' />
+        <meta name='og:image' content='/assets/images/icon.png' />
         <meta name='og:title' content='I&S' />
         <meta name="description" content="Gestión de inventario y ventas por voz" />
         <meta name='og:description' content='Gestión de inventario y ventas por voz' />

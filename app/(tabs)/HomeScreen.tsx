@@ -9,9 +9,8 @@ import { MaterialIcons, Entypo, MaterialCommunityIcons } from "@expo/vector-icon
 import { useState, useEffect } from "react";
 import { Link } from "expo-router";
 import { supabase } from "@/constants/supabase"; // Ajusta la ruta según tu estructura
-import { Alert, ScrollView , Modal } from "react-native";
+import { Alert, ScrollView, Modal } from "react-native";
 import Constants from 'expo-constants';
-
 // Tipos para TypeScript
 type LowStockProduct = {
   id: string;
@@ -176,6 +175,8 @@ export default function HomeScreen() {
       </View>
     );
   }
+
+
 
   return (
     <View style={styles.container}>

@@ -14,11 +14,13 @@ import Constants from "expo-constants";
 import * as Notifications from 'expo-notifications';
 import { supabase } from "@/constants/supabase";
 import Manual from "@/app/modal/manual";
-import Scanner, { ButtonScanner } from "@/app/components/Scanner";
+import Scanner, { ButtonScanner, ResultScanner } from "@/app/components/Scanner";
 import BackButton from "@/app/components/BackButton";
 import { formatDateForDB } from "@/app/utils/formatDate";
 import { useScanner } from "../hooks/useScanner";
 import { Picker } from "@react-native-picker/picker";
+import Entypo from '@expo/vector-icons/Entypo';
+
 export default function RegisterModal() {
   const [step, setStep] = useState<"choose" | "record" | "verify" | "scan">("choose");
   const [type, setType] = useState<"inventory" | "sale" | null>(null);
@@ -29,6 +31,8 @@ export default function RegisterModal() {
   const [isListening, setIsListening] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const { scannedData } = useScanner();
+  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
+
   const [voiceData, setVoiceData] = useState({
     nombre: "", empresa: "", grupo: "",
     precioDeVenta: "", precioDeCompra: "",
@@ -40,23 +44,18 @@ export default function RegisterModal() {
     cantidad: "", barcode: "", fechaVencimiento: ""
   });
   const [permission, requestPermission] = useCameraPermissions();
-  const [products, setProducts] = useState<any[]>([]);
 
   const getNamesProducts = async () => {
-    if (type !== "sale") return;
-
     const { data, error } = await supabase
       .from('productos')
       .select('nombre, id')
       .order('nombre', { ascending: true });
 
-    if (error) throw error;
-
+    if (error) Alert.alert("Error al obtener productos", "No se pudo obtener los productos");
     const formattedData = data?.map(product => ({
       id: product.id,
       name: product.nombre,
-    }));
-
+    })) ?? [];
     setProducts(formattedData);
   };
 
@@ -69,14 +68,12 @@ export default function RegisterModal() {
     const setupComponent = async () => {
       try {
         await requestPermission();
-
+        await getNamesProducts();
         // Verificar si el reconocimiento de voz está disponible
         const available = await ExpoSpeechRecognitionModule.getStateAsync();
-        console.log("Speech recognition state:", available);
 
         // Solicitar permisos de audio
         const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-        console.log("Audio permissions:", status);
 
         if (status !== 'granted') {
           Alert.alert(
@@ -85,12 +82,14 @@ export default function RegisterModal() {
           );
         }
       } catch (error) {
-        console.error("Error setting up component:", error);
+        Alert.alert(
+          "Error",
+          "Error en la configuración de la ventana"
+        )
       }
     };
 
     setupComponent();
-    getNamesProducts();
     return () => {
       if (isRecording || isListening) {
         ExpoSpeechRecognitionModule.stop().catch(console.error);
@@ -175,7 +174,15 @@ export default function RegisterModal() {
         }
       } else {
         // El producto no existe, crear uno nuevo
-        const { data, error } = await supabase
+        const {
+          nombre, empresa, grupo, precioDeVenta, precioDeCompra, cantidad, barcode, fechaVencimiento
+        } = form;
+        if (!nombre || !empresa || !grupo || !precioDeVenta || !precioDeCompra || !cantidad || !barcode || !fechaVencimiento) {
+          Alert.alert("Error", "Todos los campos son requeridos para guardar el producto");
+          return;
+        }
+
+        const { error } = await supabase
           .from('productos')
           .insert([{
             nombre: form.nombre,
@@ -189,7 +196,6 @@ export default function RegisterModal() {
           }]);
 
         if (error) {
-          console.error('Error guardando producto:', error);
           Alert.alert("Error", "No se pudo guardar el producto");
         } else {
           Alert.alert("Éxito", "Producto guardado correctamente");
@@ -197,7 +203,6 @@ export default function RegisterModal() {
         }
       }
     } catch (error) {
-      console.error('Error:', error);
       Alert.alert("Error", "Ocurrió un error inesperado");
     } finally {
       setIsLoading(false);
@@ -472,8 +477,8 @@ export default function RegisterModal() {
   };
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
-
-  if (!permission?.granted) {
+  // Poner en negación más adelante
+  if (permission?.granted) {
     return (
       <View style={styles.centered}>
         <Text>Se necesitan permisos para la cámara.</Text>
@@ -500,6 +505,10 @@ export default function RegisterModal() {
     setVoiceData(prev => ({ ...prev, [field]: value }));
   };
 
+  const [isEditing, setIsEditing] = useState({
+    isFieldEditing: false,
+    key: ""
+  });
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {step === "choose" && (
@@ -525,7 +534,7 @@ export default function RegisterModal() {
         <>
           <View style={{
             flexDirection: "row", justifyContent: "space-between",
-            alignItems: "center", 
+            alignItems: "center",
             marginBottom: 10
           }}>
             <BackButton path="/modal/register" onPress={() => setStep("choose")} label="Volver" />
@@ -575,6 +584,7 @@ export default function RegisterModal() {
               </View>
             )}
 
+            {/*Formulario para ventas y inventario*/}
             <View style={styles.detectedFields}>
               <Text style={styles.subtitle}>Campos detectados</Text>
               {
@@ -598,7 +608,8 @@ export default function RegisterModal() {
                         color: "#fff", fontSize: 16, fontWeight: "600",
                       }}
                     >
-                      {products.map((item) => (
+                      <Picker.Item label="Selecciona tu producto" value="" enabled={false} />
+                      {products.length > 0 && products.map((item) => (
                         <Picker.Item key={item.id} label={item.name} value={item.name} />
                       ))}
                     </Picker>
@@ -610,16 +621,59 @@ export default function RegisterModal() {
                 return (
                   <View key={key} style={styles.fieldItem}>
                     <Text style={styles.fieldName}>{key}</Text>
-                    <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected]}>
-                      {value || "(pendiente)"}
-                    </Text>
+                    <View style={{
+                      flexDirection: isEditing.isFieldEditing && key === isEditing.key
+                        ? "column-reverse" : "row",
+                      alignItems: isEditing.isFieldEditing && key === isEditing.key ? "flex-end" : "center",
+                      gap: 5,
+                    }}>
+                      {
+                        isEditing.isFieldEditing && key === isEditing.key ? (
+                          <TextInput
+                            style={[styles.input, {
+                              marginStart: 10,
+                              borderRadius: 10,
+                              borderColor: "#b8d9f9ff",
+                              borderWidth: 1,
+                              marginTop: 10,
+
+                            }]}
+                            value={value}
+                            keyboardType={
+                              key === "cantidad" || key === "precioDeVenta" || key === "precioDeCompra"
+                                ? "numeric" : "default"
+                            }
+                            onChangeText={(t) => updateField(key, t)}
+                          />
+                        ) : (
+                          <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected]}>
+                            {value || "(pendiente)"}
+                          </Text>
+                        )
+                      }
+                      {
+                        key !== "fechaVencimiento" && (
+                          <TouchableOpacity onPress={() => {
+                            if (isEditing.isFieldEditing && isEditing.key === key) {
+                              setIsEditing({ isFieldEditing: false, key: "" });
+                            } else {
+                              setIsEditing({ isFieldEditing: true, key });
+                            }
+                          }}
+                            style={{ padding: 10, borderRadius: 10, borderColor: "#1976D2", borderWidth: 1 }}>
+                            <Entypo name="pencil" size={24} color="#1976D2" />
+                          </TouchableOpacity>
+                        )
+                      }
+                    </View>
                   </View>
                 );
               })}
               {
                 type === "sale" && (
                   <>
-                    <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10 }}> Si no quiere registrarlo por voz, escanee el código de barras </Text>
+                    <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10 }}> Ó escanee el código de barras </Text>
+                    <ResultScanner scannedData={scannedData} resetScanner={() => setStep("record")} />
                     <ButtonScanner onPress={() => setStep("scan")} />
                   </>
                 )
@@ -627,7 +681,10 @@ export default function RegisterModal() {
             </View>
 
             {type === "inventory" && (
-              <ButtonScanner onPress={() => { setStep("scan"); }} />
+              <>
+                <ResultScanner scannedData={scannedData} resetScanner={() => setStep("record")} />
+                <ButtonScanner onPress={() => { setStep("scan"); }} />
+              </>
             )}
 
             <TouchableOpacity
@@ -793,6 +850,7 @@ const styles = StyleSheet.create({
   chooseText: { fontSize: 16, fontWeight: "600", marginTop: 8, color: "#fff" },
   nextButton: {
     marginTop: 15,
+    marginBottom: 45,
     width: "100%",
     backgroundColor: "#2a8fa9ff",
     paddingHorizontal: 25,

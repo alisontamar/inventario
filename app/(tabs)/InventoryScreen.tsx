@@ -39,9 +39,7 @@ export default function InventoryTable() {
   // Función para cargar productos desde Supabase (CORREGIDA)
   const loadProducts = async () => {
     try {
-      setLoading(true);
-      console.log('Cargando productos desde Supabase...');
-      
+      setLoading(true);      
       const { data, error } = await supabase
         .from('productos')
         .select('*')
@@ -158,7 +156,7 @@ export default function InventoryTable() {
             </View>
 
             {/* Indicador de stock bajo */}
-            {item.cantidad < 3 && (
+            {item.cantidad <= 3 && (
               <View style={styles.lowStockIndicator}>
                 <Text style={styles.lowStockText}>⚠️ Stock bajo</Text>
               </View>
@@ -179,9 +177,6 @@ export default function InventoryTable() {
                 </Text>
                 <Text style={styles.extraText}>
                   Código de barras: {item.barcode || 'No especificado'}
-                </Text>
-                <Text style={styles.extraText}>
-                  Características: {item.caracteristicas || 'No especificadas'}
                 </Text>
                 <Text style={styles.extraText}>
                   Fecha de creación: {formatDate(item.fecha_creacion)}
