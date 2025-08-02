@@ -98,10 +98,10 @@ export default function RegisterModal() {
   }, []);
 
   useEffect(() => {
-    if (scannedData) {
+    if (scannedData && step === "record") {
       setForm(prev => ({ ...prev, barcode: scannedData }));
     }
-  }, [scannedData]);
+  }, [scannedData, step]);
 
   // Funciones para guardar en la base de datos
   const guardarProducto = async () => {
@@ -163,7 +163,6 @@ export default function RegisterModal() {
           .eq('id', existingProduct.id);
 
         if (updateError) {
-          console.error('Error actualizando producto:', updateError);
           Alert.alert("Error", "No se pudo actualizar el producto");
         } else {
           Alert.alert(
@@ -477,15 +476,28 @@ export default function RegisterModal() {
   };
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
+
+  const [isEditing, setIsEditing] = useState({
+    isFieldEditing: false,
+    key: ""
+  });
+
+  const updateField = (field: keyof typeof form, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    setVoiceData(prev => ({ ...prev, [field]: value }));
+  };
+
   // Poner en negación más adelante
-  if (permission?.granted) {
+  if (!permission?.granted) {
     return (
-      <View style={styles.centered}>
-        <Text>Se necesitan permisos para la cámara.</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.nextText}>Conceder permisos</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.centered}>
+          <Text>Se necesitan permisos para la cámara.</Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+            <Text style={styles.nextText}>Conceder permisos</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -500,15 +512,6 @@ export default function RegisterModal() {
     setForm({ nombre: "", empresa: "", grupo: "", precioDeVenta: "", precioDeCompra: "", cantidad: "", barcode: "", fechaVencimiento: "" });
   };
 
-  const updateField = (field: keyof typeof form, value: string) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-    setVoiceData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const [isEditing, setIsEditing] = useState({
-    isFieldEditing: false,
-    key: ""
-  });
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {step === "choose" && (
@@ -616,56 +619,94 @@ export default function RegisterModal() {
                   </View>
                 )
               }
-              {Object.entries(voiceData).map(([key, value]) => {
+              {Object.entries(form).map(([key, value]) => {
                 if (type === "sale" && !["cantidad", "precioDeVenta"].includes(key)) return null;
+                if (type === "inventory" && key === "nombre") return null;
                 return (
-                  <View key={key} style={styles.fieldItem}>
-                    <Text style={styles.fieldName}>{key}</Text>
+                  <View key={key} style={[styles.fieldItem, {
+                    borderBottomWidth: 1,
+                    borderBottomColor: "#333",
+                    paddingVertical: 15,
+                    marginBottom: 0
+                  }]}>
                     <View style={{
-                      flexDirection: isEditing.isFieldEditing && key === isEditing.key
-                        ? "column-reverse" : "row",
-                      alignItems: isEditing.isFieldEditing && key === isEditing.key ? "flex-end" : "center",
-                      gap: 5,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%"
                     }}>
-                      {
-                        isEditing.isFieldEditing && key === isEditing.key ? (
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldName, {
+                          fontSize: 16,
+                          fontWeight: "600",
+                          marginBottom: 5,
+                          textTransform: "capitalize"
+                        }]}>
+                          {key}
+                        </Text>
+
+                        {isEditing.isFieldEditing && key === isEditing.key ? (
                           <TextInput
                             style={[styles.input, {
-                              marginStart: 10,
-                              borderRadius: 10,
+                              borderRadius: 8,
                               borderColor: "#b8d9f9ff",
                               borderWidth: 1,
-                              marginTop: 10,
-
+                              paddingHorizontal: 12,
+                              paddingVertical: 10,
+                              fontSize: 16,
+                              backgroundColor: "#1a1a1a",
+                              color: "#fff",
+                              marginTop: 5
                             }]}
                             value={value}
                             keyboardType={
                               key === "cantidad" || key === "precioDeVenta" || key === "precioDeCompra"
                                 ? "numeric" : "default"
                             }
-                            onChangeText={(t) => updateField(key, t)}
+                            onChangeText={(t) => updateField(key as keyof typeof form, t)}
+                            autoFocus={true}
+                            onBlur={() => setIsEditing({ isFieldEditing: false, key: "" })}
                           />
                         ) : (
-                          <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected]}>
+                          <Text style={[styles.fieldValue, value ? styles.detected : styles.notDetected, {
+                            fontSize: 14,
+                            color: value ? "#fff" : "#888"
+                          }]}>
                             {value || "(pendiente)"}
                           </Text>
-                        )
-                      }
-                      {
-                        key !== "fechaVencimiento" && (
-                          <TouchableOpacity onPress={() => {
-                            if (isEditing.isFieldEditing && isEditing.key === key) {
-                              setIsEditing({ isFieldEditing: false, key: "" });
-                            } else {
-                              setIsEditing({ isFieldEditing: true, key });
-                            }
-                          }}
-                            style={{ padding: 10, borderRadius: 10, borderColor: "#1976D2", borderWidth: 1 }}>
-                            <Entypo name="pencil" size={24} color="#1976D2" />
-                          </TouchableOpacity>
-                        )
-                      }
+                        )}
+                      </View>
                     </View>
+
+                    {key !== "fechaVencimiento" && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (isEditing.isFieldEditing && isEditing.key === key) {
+                            setIsEditing({ isFieldEditing: false, key: "" });
+                          } else {
+                            setIsEditing({ isFieldEditing: true, key });
+                          }
+                        }}
+                        style={{
+                          padding: 12,
+                          borderRadius: 8,
+                          borderColor: "#1976D2",
+                          borderWidth: 1,
+                          backgroundColor: isEditing.isFieldEditing && isEditing.key === key ? "#1976D2" : "transparent",
+                          width: 48,
+                          height: 48,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginLeft: 15
+                        }}
+                      >
+                        <Entypo
+                          name="pencil"
+                          size={18}
+                          color={isEditing.isFieldEditing && isEditing.key === key ? "#fff" : "#1976D2"}
+                        />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 );
               })}
