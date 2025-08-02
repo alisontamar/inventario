@@ -1,13 +1,9 @@
 import { useState } from "react";
-import { BarcodeScanningResult } from "expo-camera";
 import { Alert } from "react-native";
+import { BarcodeScanningResult } from "expo-camera";
 import { supabase } from "@/constants/supabase";
 
 export function useScanner() {
-    // Iniciar el escaneo y la cámara
-    // Si está escaneando
-    // Devolver el código de barras detectado
-    // Si no está escaneando, devolver null
     const [isScanning, setIsScanning] = useState(false);
     const [scannedData, setScannedData] = useState<string | null>(null);
 

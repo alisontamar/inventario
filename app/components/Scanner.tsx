@@ -7,7 +7,6 @@ import { useEffect, useRef } from "react";
 export default function Scanner({ goPath, typeSection = "inventory" }: { goPath: () => void, typeSection?: string }) {
     const { scannedData, isScanning, searchingProductTypeSale, handleBarCodeScanned,
         resetScanner } = useScanner();
-    console.log(typeSection)
     useEffect(() => {
         const searchingPruductsSale = async () => {
             if (typeSection === "sale" && scannedData) {
@@ -16,6 +15,7 @@ export default function Scanner({ goPath, typeSection = "inventory" }: { goPath:
         }
         searchingPruductsSale();
     }, [scannedData]);
+
     return (
         <>
             <StartScanner isScanning={isScanning} handleBarCodeScanned={handleBarCodeScanned} />
@@ -52,7 +52,7 @@ function StartScanner({ isScanning, handleBarCodeScanned }: { isScanning: boolea
     );
 }
 
-function ResultScanner({ scannedData, resetScanner }: { scannedData: any | null, resetScanner: () => void }) {
+export function ResultScanner({ scannedData, resetScanner }: { scannedData: any | null, resetScanner: () => void }) {
     return (
         <View style={styles.scanResultContainer}>
             <Text style={styles.scanResultText}>

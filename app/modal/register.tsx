@@ -14,7 +14,7 @@ import Constants from "expo-constants";
 import * as Notifications from 'expo-notifications';
 import { supabase } from "@/constants/supabase";
 import Manual from "@/app/modal/manual";
-import Scanner, { ButtonScanner } from "@/app/components/Scanner";
+import Scanner, { ButtonScanner, ResultScanner } from "@/app/components/Scanner";
 import BackButton from "@/app/components/BackButton";
 import { formatDateForDB } from "@/app/utils/formatDate";
 import { useScanner } from "../hooks/useScanner";
@@ -174,7 +174,15 @@ export default function RegisterModal() {
         }
       } else {
         // El producto no existe, crear uno nuevo
-        const { data, error } = await supabase
+        const {
+          nombre, empresa, grupo, precioDeVenta, precioDeCompra, cantidad, barcode, fechaVencimiento
+        } = form;
+        if (!nombre || !empresa || !grupo || !precioDeVenta || !precioDeCompra || !cantidad || !barcode || !fechaVencimiento) {
+          Alert.alert("Error", "Todos los campos son requeridos para guardar el producto");
+          return;
+        }
+
+        const { error } = await supabase
           .from('productos')
           .insert([{
             nombre: form.nombre,
@@ -188,7 +196,6 @@ export default function RegisterModal() {
           }]);
 
         if (error) {
-          console.error('Error guardando producto:', error);
           Alert.alert("Error", "No se pudo guardar el producto");
         } else {
           Alert.alert("Éxito", "Producto guardado correctamente");
@@ -196,7 +203,6 @@ export default function RegisterModal() {
         }
       }
     } catch (error) {
-      console.error('Error:', error);
       Alert.alert("Error", "Ocurrió un error inesperado");
     } finally {
       setIsLoading(false);
@@ -498,6 +504,7 @@ export default function RegisterModal() {
     setForm(prev => ({ ...prev, [field]: value }));
     setVoiceData(prev => ({ ...prev, [field]: value }));
   };
+
   const [isEditing, setIsEditing] = useState({
     isFieldEditing: false,
     key: ""
@@ -666,6 +673,7 @@ export default function RegisterModal() {
                 type === "sale" && (
                   <>
                     <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10 }}> Ó escanee el código de barras </Text>
+                    <ResultScanner scannedData={scannedData} resetScanner={() => setStep("record")} />
                     <ButtonScanner onPress={() => setStep("scan")} />
                   </>
                 )
@@ -673,7 +681,10 @@ export default function RegisterModal() {
             </View>
 
             {type === "inventory" && (
-              <ButtonScanner onPress={() => { setStep("scan"); }} />
+              <>
+                <ResultScanner scannedData={scannedData} resetScanner={() => setStep("record")} />
+                <ButtonScanner onPress={() => { setStep("scan"); }} />
+              </>
             )}
 
             <TouchableOpacity
