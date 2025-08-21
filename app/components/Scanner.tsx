@@ -1,13 +1,14 @@
+import { useEffect, useRef } from "react";
+import * as SecureStore from 'expo-secure-store';
+import { BarcodeScanningResult, CameraView } from "expo-camera";
 import { View } from "@/components/Themed";
 import { useScanner } from "@/app/hooks/useScanner";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
-import { BarcodeScanningResult, CameraView } from "expo-camera";
-import { useEffect, useRef } from "react";
-import * as SecureStore from 'expo-secure-store';
 
 export default function Scanner({ goPath, typeSection = "inventory" }: { goPath: () => void, typeSection?: string }) {
     const { scannedData, isScanning, searchingProductTypeSale, handleBarCodeScanned,
         resetScanner } = useScanner();
+    
     useEffect(() => {
         const searchingPruductsSale = async () => {
             if (typeSection === "sale" && scannedData) {
@@ -20,9 +21,12 @@ export default function Scanner({ goPath, typeSection = "inventory" }: { goPath:
     return (
         <>
             <StartScanner isScanning={isScanning} handleBarCodeScanned={handleBarCodeScanned} />
-            <ResultScanner scannedData={scannedData}
-                resetScanner={resetScanner}
-            />
+            {/* Solo mostrar ResultScanner si hay datos escaneados */}
+            {scannedData && (
+                <ResultScanner scannedData={scannedData}
+                    resetScanner={resetScanner}
+                />
+            )}
             <ActionButtonScanner goPath={goPath} scannedData={scannedData} />
         </>
     );
@@ -65,6 +69,7 @@ export function ResultScanner({ scannedData, resetScanner }: { scannedData: any 
                 });
         }
     }, [scannedData]);
+    
     return (
         <View style={styles.scanResultContainer}>
             <Text style={styles.scanResultText}>
