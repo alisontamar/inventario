@@ -8,6 +8,7 @@ import * as SecureStore from 'expo-secure-store';
 export default function Scanner({ goPath, typeSection = "inventory" }: { goPath: () => void, typeSection?: string }) {
     const { scannedData, isScanning, searchingProductTypeSale, handleBarCodeScanned,
         resetScanner } = useScanner();
+    
     useEffect(() => {
         const searchingPruductsSale = async () => {
             if (typeSection === "sale" && scannedData) {
@@ -20,9 +21,12 @@ export default function Scanner({ goPath, typeSection = "inventory" }: { goPath:
     return (
         <>
             <StartScanner isScanning={isScanning} handleBarCodeScanned={handleBarCodeScanned} />
-            <ResultScanner scannedData={scannedData}
-                resetScanner={resetScanner}
-            />
+            {/* Solo mostrar ResultScanner si hay datos escaneados */}
+            {scannedData && (
+                <ResultScanner scannedData={scannedData}
+                    resetScanner={resetScanner}
+                />
+            )}
             <ActionButtonScanner goPath={goPath} scannedData={scannedData} />
         </>
     );
@@ -65,6 +69,7 @@ export function ResultScanner({ scannedData, resetScanner }: { scannedData: any 
                 });
         }
     }, [scannedData]);
+    
     return (
         <View style={styles.scanResultContainer}>
             <Text style={styles.scanResultText}>
@@ -80,18 +85,19 @@ export function ResultScanner({ scannedData, resetScanner }: { scannedData: any 
     );
 }
 
-function ActionButtonScanner({ goPath, scannedData }: { 
-    goPath: (scannedCode?: string) => void, 
-    scannedData: any | null 
-}) {
-    const handleContinue = () => {
-        // Pasar el código escaneado cuando hay uno disponible
-        if (scannedData) {
-            goPath(scannedData as string);
-        } else {
-            goPath(); // Volver sin código
-        }
-    };
+function ActionButtonScanner({ goPath, scannedData }: { goPath: () => void, scannedData: any | null }) {
+    return (
+        <View style={styles.scanControls}>
+            <TouchableOpacity
+                style={styles.actionButton}
+                onPress={goPath}
+            >
+                <Text style={styles.nextText}>{scannedData ? "Continuar" : "Volver"}</Text>
+            </TouchableOpacity>
+        </View>
+    );
+}
+
 const styles = StyleSheet.create({
     title: {
         fontSize: 22,

@@ -24,6 +24,7 @@ import { supabase } from "@/constants/supabase";
 import { formatDateForDB } from "@/app/utils/formatDate";
 import { useScanner } from "@/app/hooks/useScanner";
 import Manual from "@/app/modal/manual";
+import * as SecureStore from 'expo-secure-store';
 
 export default function RegisterModal() {
   const [step, setStep] = useState<"choose" | "record" | "verify" | "scan">("choose");
@@ -539,17 +540,11 @@ export default function RegisterModal() {
   };
 
   useEffect(() => setForm(prev => ({ ...prev, ...voiceData })), [voiceData]);
-  // Poner en negación más adelante
-  if (permission?.granted) {
-    return (
-      <View style={styles.centered}>
-        <Text>Se necesitan permisos para la cámara.</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.nextText}>Conceder permisos</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+
+  const [isEditing, setIsEditing] = useState({
+    isFieldEditing: false,
+    key: ""
+  });
 
   const reset = () => {
     setStep("choose");
@@ -567,10 +562,8 @@ export default function RegisterModal() {
     setVoiceData(prev => ({ ...prev, [field]: value }));
   };
 
-  const [isEditing, setIsEditing] = useState({
-    isFieldEditing: false,
-    key: ""
-  });
+  if (!permission?.granted) return <PermissionCamera requestPermission={requestPermission} />;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {step === "choose" && <Choose setType={setType} setStep={setStep} />}
