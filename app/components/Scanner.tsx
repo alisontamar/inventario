@@ -1,35 +1,66 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as SecureStore from 'expo-secure-store';
 import { BarcodeScanningResult, CameraView } from "expo-camera";
 import { View } from "@/components/Themed";
 import { useScanner } from "@/app/hooks/useScanner";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 
-export default function Scanner({ goPath, typeSection = "inventory" }: { goPath: () => void, typeSection?: string }) {
-    const { scannedData, isScanning, searchingProductTypeSale, handleBarCodeScanned,
-        resetScanner } = useScanner();
-    
-    useEffect(() => {
-        const searchingPruductsSale = async () => {
-            if (typeSection === "sale" && scannedData) {
-                await searchingProductTypeSale(scannedData as string);
-            }
-        }
-        searchingPruductsSale();
-    }, [scannedData]);
+function StartScanner({ isScanning, onScanned }: { isScanning: boolean, onScanned: (data: string) => void }) {
+  const cameraRef = useRef<CameraView>(null);
 
-    return (
-        <>
-            <StartScanner isScanning={isScanning} handleBarCodeScanned={handleBarCodeScanned} />
-            {/* Solo mostrar ResultScanner si hay datos escaneados */}
-            {scannedData && (
-                <ResultScanner scannedData={scannedData}
-                    resetScanner={resetScanner}
-                />
-            )}
-            <ActionButtonScanner goPath={goPath} scannedData={scannedData} />
-        </>
-    );
+  const handleBarCodeScanned = async (result: BarcodeScanningResult) => {
+    if (!isScanning) return;
+    onScanned(result.data); // actualizamos el estado arriba
+  };
+
+  return (
+    <View style={{ flex: 1, width: "100%", alignItems: "center" }}>
+      <Text style={styles.title}>Escanea el código de barras</Text>
+      <CameraView
+        ref={cameraRef}
+        style={{ width: "100%", height: "100%" }}
+        facing="back"
+        autofocus="on"
+        onBarcodeScanned={handleBarCodeScanned}
+        barcodeScannerSettings={{ barcodeTypes: ["code128", "ean13", "ean8", "qr"] }}
+      />
+    </View>
+  );
+}
+
+export default function Scanner({ goPath, typeSection = "inventory" }: { goPath: () => void, typeSection?: string }) {
+  const { isScanning, searchingProductTypeSale, resetScanner } = useScanner();
+  const [scannedData, setScannedData] = useState<string | null>(null);
+
+  useEffect(() => {
+    const searchingProductsSale = async (barcode: string) => {
+      if (typeSection === "sale" && barcode) {
+        await searchingProductTypeSale(barcode);
+      }
+    };
+
+    if (scannedData) {
+      SecureStore.setItemAsync("scannedData", scannedData);
+      searchingProductsSale(scannedData);
+    }
+  }, [scannedData]);
+
+  return (
+    <>
+      {!scannedData ? (
+        <StartScanner
+          isScanning={isScanning}
+          onScanned={(data) => setScannedData(data)}
+        />
+      ) : (
+        <ResultScanner scannedData={scannedData} resetScanner={() => {
+          resetScanner?.();
+          setScannedData(null);
+        }} />
+      )}
+      <ActionButtonScanner goPath={goPath} scannedData={scannedData} />
+    </>
+  );
 }
 
 export function ButtonScanner({ onPress }: { onPress: () => void }) {
@@ -38,23 +69,6 @@ export function ButtonScanner({ onPress }: { onPress: () => void }) {
             <Text style={styles.optionText}>📎 Escanear código de barras</Text>
         </TouchableOpacity>
     )
-}
-
-function StartScanner({ isScanning, handleBarCodeScanned }: { isScanning: boolean, handleBarCodeScanned: (result: BarcodeScanningResult) => Promise<void> }) {
-    const cameraRef = useRef<CameraView>(null);
-    return (
-        <View style={{ flex: 1, width: "100%", alignItems: "center" }}>
-            <Text style={styles.title}>Escanea el código de barras</Text>
-            <CameraView
-                ref={cameraRef}
-                style={{ width: "100%", height: "100%" }}
-                facing="back"
-                autofocus="on"
-                onBarcodeScanned={isScanning ? undefined : handleBarCodeScanned}
-                barcodeScannerSettings={{ barcodeTypes: ["code128", "ean13", "ean8", "qr"] }}
-            />
-        </View>
-    );
 }
 
 export function ResultScanner({ scannedData, resetScanner }: { scannedData: any | null, resetScanner?: () => void }) {
@@ -69,7 +83,7 @@ export function ResultScanner({ scannedData, resetScanner }: { scannedData: any 
                 });
         }
     }, [scannedData]);
-    
+
     return (
         <View style={styles.scanResultContainer}>
             <Text style={styles.scanResultText}>
