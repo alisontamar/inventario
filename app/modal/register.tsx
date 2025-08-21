@@ -22,7 +22,6 @@ import Choose from "@/app/components/Choose";
 import FormInventory from "@/app/components/FormInventory";
 import { supabase } from "@/constants/supabase";
 import { formatDateForDB } from "@/app/utils/formatDate";
-import { useScanner } from "@/app/hooks/useScanner";
 import Manual from "@/app/modal/manual";
 import * as SecureStore from 'expo-secure-store';
 
@@ -35,7 +34,6 @@ export default function RegisterModal() {
   const [recognitionResults, setRecognitionResults] = useState<string[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [showManual, setShowManual] = useState(false);
-  const { scannedData } = useScanner();
   const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
 
   const [voiceData, setVoiceData] = useState({
@@ -155,21 +153,17 @@ export default function RegisterModal() {
         const storedScannedData = await SecureStore.getItemAsync('scannedData');
 
         if (storedScannedData) {
-          console.log("Datos escaneados leídos desde SecureStore:", storedScannedData);
           // Si hay datos guardados, actualizamos el estado
           setForm(prev => ({ ...prev, barcode: storedScannedData }));
-        } else {
-          console.log('No hay datos escaneados guardados en SecureStore');
         }
       } catch (error) {
         console.log('Error al leer los datos de SecureStore:', error);
       }
     };
 
-    if (scannedData) {
-      console.log("Scanner data received:", scannedData);
+    if (form.barcode) {
       // Guardamos el nuevo scannedData en SecureStore
-      SecureStore.setItemAsync('scannedData', scannedData)
+      SecureStore.setItemAsync('scannedData', form.barcode)
         .then(() => {
           console.log('Datos escaneados guardados en SecureStore');
         })
@@ -178,17 +172,15 @@ export default function RegisterModal() {
         });
 
       // Actualizamos el estado local con los datos escaneados
-      setForm(prev => ({ ...prev, barcode: scannedData }));
+      setForm(prev => ({ ...prev, barcode: form.barcode }));
 
       // Si es venta y hay scannedData, buscar el producto automáticamente
-      if (type === "sale" && scannedData) {
-        searchProductByScan(scannedData);  // Llamada a la función para buscar el producto
-      }
+      searchProductByScan(form.barcode);  // Llamada a la función para buscar el producto
     } else {
       // Si no hay scannedData, intentamos leer desde SecureStore
       loadScannedData();
     }
-  }, [scannedData, type]);
+  }, [form.barcode]);
 
   // Funciones para guardar en la base de datos
   const guardarProducto = async () => {
@@ -623,7 +615,13 @@ export default function RegisterModal() {
 
             <View style={styles.detectedFields}>
               <Text style={styles.subtitle}>Campos detectados</Text>
-              {scannedData && <ResultScanner scannedData={scannedData} />}
+              {form.barcode && <ResultScanner scannedData={form.barcode} resetScanner={
+                () => {
+                  setStep("scan");
+                  setForm({ ...form, barcode: "", nombre: "", precioDeVenta: "" });
+                  setVoiceData({ ...voiceData, nombre: "", precioDeVenta: "" });
+                }
+              } />}
               {
                 type === "sale" && (
                   <View style={[{
@@ -695,6 +693,8 @@ export default function RegisterModal() {
               {Object.entries(form).map(([key, value]) => {
                 // Para sales, solo mostrar campos relevantes
                 if (type === "sale" && !["nombre", "cantidad", "precioDeVenta"].includes(key)) return null;
+
+                if (type === "sale" && key === "nombre") return null;
                 // No mostrar barcode en la lista, se maneja por separado
                 if (key === "barcode") return null;
 
@@ -807,7 +807,7 @@ export default function RegisterModal() {
                 (type === "sale" || type === "inventory") && (
                   <>
                     <Text style={{ color: "#fff", fontSize: 14, marginVertical: 10, textAlign: "center" }}>
-                      {!scannedData ? "Escanea el código de barras" : "¿Escanear otro código?"}
+                      {!form.barcode ? "Escanea el código de barras" : "¿Escanear otro código?"}
                     </Text>
                     <ButtonScanner onPress={() => setStep("scan")} />
                   </>
@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
   chooseText: { fontSize: 16, fontWeight: "600", marginTop: 8, color: "#fff" },
   nextButton: {
     marginTop: 15,
-    marginBottom: 45,
+    marginBottom: 60,
     width: "100%",
     backgroundColor: "#2a8fa9ff",
     paddingHorizontal: 25,
