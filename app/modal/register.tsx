@@ -22,7 +22,6 @@ import Choose from "@/app/components/Choose";
 import FormInventory from "@/app/components/FormInventory";
 import { supabase } from "@/constants/supabase";
 import { formatDateForDB } from "@/app/utils/formatDate";
-import { useScanner } from "@/app/hooks/useScanner";
 import Manual from "@/app/modal/manual";
 import * as SecureStore from 'expo-secure-store';
 
@@ -35,7 +34,6 @@ export default function RegisterModal() {
   const [recognitionResults, setRecognitionResults] = useState<string[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [showManual, setShowManual] = useState(false);
-  const { scannedData } = useScanner();
   const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
 
   const [voiceData, setVoiceData] = useState({
@@ -614,7 +612,7 @@ export default function RegisterModal() {
                 </Text>
               </View>
             )}
-            {/*  */}
+
             <View style={styles.detectedFields}>
               <Text style={styles.subtitle}>Campos detectados</Text>
               {form.barcode && <ResultScanner scannedData={form.barcode} resetScanner={
